@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Praktik Start Notes — Arief</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#060a10;--bg2:#0c1220;--bg3:#111827;
+    --border:#1e293b;--border2:#2d3f58;
+    --cyan:#22d3ee;--green:#4ade80;--orange:#fb923c;
+    --yellow:#fbbf24;--red:#f87171;--purple:#a78bfa;
+    --text:#e2e8f0;--muted:#64748b;--dim:#94a3b8;
+    --mono:'JetBrains Mono',monospace;
+    --sans:'DM Sans',sans-serif;
+    --display:'Syne',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--sans);background:var(--bg);color:var(--text);padding:40px 24px 80px;max-width:780px;margin:0 auto}
+  body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(34,211,238,.02) 1px,transparent 1px),linear-gradient(90deg,rgba(34,211,238,.02) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
+
+  /* HEADER */
+  .header{margin-bottom:40px;padding-bottom:28px;border-bottom:1px solid var(--border);position:relative;z-index:1}
+  .badge{font-family:var(--mono);font-size:10px;color:var(--cyan);background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.2);border-radius:4px;padding:3px 9px;display:inline-block;margin-bottom:14px}
+  h1{font-family:var(--display);font-size:32px;font-weight:800;line-height:1.1;margin-bottom:10px;background:linear-gradient(135deg,#e2e8f0,#22d3ee);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+  .subtitle{font-size:14px;color:var(--dim);line-height:1.6}
+  .device-pill{display:inline-flex;align-items:center;gap:8px;margin-top:14px;font-family:var(--mono);font-size:11px;color:var(--text);background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:6px 12px}
+  .device-pill .dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green)}
+
+  /* SECTION */
+  .section{margin-bottom:36px;position:relative;z-index:1}
+  .section-label{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .section-label::after{content:'';flex:1;height:1px;background:var(--border)}
+  h2{font-family:var(--display);font-size:17px;font-weight:700;color:var(--text);margin-bottom:14px}
+
+  /* CARD */
+  .card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:12px}
+  .card p,.card li{font-size:13.5px;color:var(--dim);line-height:1.7}
+  .card ul{padding-left:16px}
+  .card li{margin-bottom:5px}
+  .card li strong,.card p strong{color:var(--text);font-weight:500}
+  .card-title{font-family:var(--display);font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px;display:flex;align-items:center;gap:6px}
+
+  /* SPEC TABLE */
+  .spec-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+  .spec-item{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px 14px}
+  .spec-key{font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px}
+  .spec-val{font-size:14px;color:var(--text);font-weight:500}
+  .spec-note{font-family:var(--mono);font-size:10px;margin-top:3px}
+  .ok{color:var(--green)}.warn{color:var(--yellow)}.bad{color:var(--red)}
+
+  /* MODEL TABLE */
+  .tbl{width:100%;border-collapse:collapse;font-size:13px;margin:8px 0}
+  .tbl th{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);padding:8px 12px;border-bottom:1px solid var(--border2);text-align:left}
+  .tbl td{padding:9px 12px;border-bottom:1px solid var(--border);color:var(--dim);vertical-align:middle}
+  .tbl tr:last-child td{border-bottom:none}
+  .tbl tr:hover td{background:rgba(255,255,255,.02)}
+
+  /* CODE */
+  .code-block{background:#020917;border:1px solid var(--border);border-radius:8px;margin:10px 0;overflow:hidden}
+  .code-header{display:flex;align-items:center;justify-content:space-between;padding:6px 12px;background:rgba(255,255,255,.02);border-bottom:1px solid var(--border)}
+  .code-lang{font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
+  .code-copy{font-family:var(--mono);font-size:10px;color:var(--muted);background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:3px;transition:all .15s}
+  .code-copy:hover{color:var(--cyan);background:rgba(34,211,238,.1)}
+  pre.code{font-family:var(--mono);font-size:12px;line-height:1.8;color:#e2e8f0;padding:14px;overflow-x:auto;white-space:pre}
+  .cm{color:#475569;font-style:italic}.kw{color:#f472b6}.str{color:#4ade80}.var{color:#a78bfa}.fn{color:#22d3ee}.num{color:#fb923c}
+
+  /* CONCEPT BOX */
+  .box{border-left:3px solid var(--cyan);background:rgba(34,211,238,.04);border-radius:0 8px 8px 0;padding:12px 15px;margin:10px 0}
+  .box.green{border-color:var(--green);background:rgba(74,222,128,.04)}
+  .box.orange{border-color:var(--orange);background:rgba(251,146,60,.04)}
+  .box.yellow{border-color:var(--yellow);background:rgba(251,191,36,.04)}
+  .box.red{border-color:var(--red);background:rgba(248,113,113,.04)}
+  .box.purple{border-color:var(--purple);background:rgba(167,139,250,.04)}
+  .box-label{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:var(--cyan);margin-bottom:5px}
+  .box.green .box-label{color:var(--green)}
+  .box.orange .box-label{color:var(--orange)}
+  .box.yellow .box-label{color:var(--yellow)}
+  .box.red .box-label{color:var(--red)}
+  .box.purple .box-label{color:var(--purple)}
+  .box p,.box li{font-size:13.5px;color:var(--dim);line-height:1.7}
+  .box ul{padding-left:16px;margin-top:4px}
+  .box li{margin-bottom:3px}
+  .box li strong{color:var(--text);font-weight:500}
+
+  /* CHECKLIST */
+  .checklist{list-style:none}
+  .checklist li{padding:5px 0;font-size:13.5px;color:var(--dim);display:flex;align-items:flex-start;gap:8px;line-height:1.6}
+  .checklist li::before{content:'□';color:var(--border2);font-size:15px;flex-shrink:0;margin-top:1px}
+  .checklist li.done::before{content:'✓';color:var(--green)}
+
+  /* INLINE CODE */
+  code{font-family:var(--mono);font-size:12px;background:rgba(34,211,238,.08);color:var(--cyan);padding:2px 6px;border-radius:3px}
+
+  /* TAGS */
+  .tag{font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:4px;display:inline-flex;align-items:center}
+  .tag-green{background:rgba(74,222,128,.1);color:var(--green);border:1px solid rgba(74,222,128,.2)}
+  .tag-yellow{background:rgba(251,191,36,.1);color:var(--yellow);border:1px solid rgba(251,191,36,.2)}
+  .tag-red{background:rgba(248,113,113,.1);color:var(--red);border:1px solid rgba(248,113,113,.2)}
+  .tag-cyan{background:rgba(34,211,238,.1);color:var(--cyan);border:1px solid rgba(34,211,238,.2)}
+
+  /* TWO COL */
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+  /* PRIORITY BADGE */
+  .priority{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;color:var(--orange);margin-bottom:6px}
+
+  /* FOOTER */
+  .footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--muted);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;position:relative;z-index:1}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="badge">📋 Praktik Start Notes · Hardware-Specific</div>
+  <h1>Setup Catatan<br>Sebelum Mulai</h1>
+  <p class="subtitle">Catatan khusus untuk hardware kamu — model yang bisa dipakai, optimasi sistem, dan hal-hal praktis yang perlu diketahui sebelum mulai praktek.</p>
+  <div class="device-pill">
+    <span class="dot"></span>
+    Lenovo ThinkPad T14 Gen 4 · i5-1335U · 16GB · Ubuntu 24.04 LTS
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════
+     SPEC SUMMARY
+══════════════════════════════ -->
+<div class="section">
+  <div class="section-label">Hardware Overview</div>
+  <div class="spec-grid">
+    <div class="spec-item">
+      <div class="spec-key">Processor</div>
+      <div class="spec-val">i5-1335U × 12</div>
+      <div class="spec-note ok">✓ Cukup untuk inference 7B</div>
+    </div>
+    <div class="spec-item">
+      <div class="spec-key">Memory</div>
+      <div class="spec-val">16 GB RAM</div>
+      <div class="spec-note ok">✓ Sweet spot untuk belajar</div>
+    </div>
+    <div class="spec-item">
+      <div class="spec-key">GPU</div>
+      <div class="spec-val">Intel Iris Xe</div>
+      <div class="spec-note warn">⚠ Integrated — CPU-only inference</div>
+    </div>
+    <div class="spec-item">
+      <div class="spec-key">Storage</div>
+      <div class="spec-val">512 GB SSD</div>
+      <div class="spec-note warn">⚠ Perlu dikelola — model besar</div>
+    </div>
+  </div>
+  <div class="box orange">
+    <div class="box-label">Implikasi Tidak Ada GPU Dedicated</div>
+    <p>Inference berjalan di CPU. Model 7B akan menghasilkan sekitar <strong>5–15 token per detik</strong> — artinya satu jawaban sedang bisa butuh 10–30 detik. Ini normal dan tidak ada yang rusak. Untuk belajar, ini lebih dari cukup.</p>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════
+     MODEL SELECTION
+══════════════════════════════ -->
+<div class="section">
+  <div class="section-label">Model Selection</div>
+  <h2>Model yang Bisa Dipakai</h2>
+
+  <div class="card">
+    <table class="tbl">
+      <tr>
+        <th>Model</th>
+        <th>Ukuran</th>
+        <th>RAM Usage</th>
+        <th>Status</th>
+        <th>Catatan</th>
+      </tr>
+      <tr>
+        <td><strong>qwen2.5-coder:7b</strong></td>
+        <td>~4.7 GB</td>
+        <td>~6 GB</td>
+        <td><span class="tag tag-green">✓ Utama</span></td>
+        <td>Gunakan ini untuk semua coding task</td>
+      </tr>
+      <tr>
+        <td><strong>nomic-embed-text</strong></td>
+        <td>~274 MB</td>
+        <td>~0.5 GB</td>
+        <td><span class="tag tag-green">✓ Wajib</span></td>
+        <td>Untuk RAG — pull sekarang juga</td>
+      </tr>
+      <tr>
+        <td><strong>llama3.1:8b</strong></td>
+        <td>~4.9 GB</td>
+        <td>~6 GB</td>
+        <td><span class="tag tag-cyan">Optional</span></td>
+        <td>Alternatif untuk general task non-coding</td>
+      </tr>
+      <tr>
+        <td><strong>qwen2.5-coder:14b</strong></td>
+        <td>~9 GB</td>
+        <td>~11 GB</td>
+        <td><span class="tag tag-yellow">⚠ Mepet</span></td>
+        <td>Bisa, tapi tutup semua app lain dulu</td>
+      </tr>
+      <tr>
+        <td><strong>qwen3-coder</strong></td>
+        <td>~16 GB+</td>
+        <td>OOM</td>
+        <td><span class="tag tag-red">✗ Skip</span></td>
+        <td>Terlalu besar untuk 16GB RAM</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="code-block">
+    <div class="code-header"><span class="code-lang">bash — Pull model sekarang</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+    <pre class="code"><span class="cm"># Pull dua model ini — cukup untuk semua section dokumentasi</span>
+ollama pull qwen2.5-coder:7b
+ollama pull nomic-embed-text
+
+<span class="cm"># Verifikasi</span>
+ollama list
+
+<span class="cm"># Cek berapa storage yang dipakai</span>
+du -sh ~/.ollama/models/</pre>
+  </div>
+
+  <div class="box yellow">
+    <div class="box-label">💾 Perhatikan Storage</div>
+    <p>Model-model Ollama disimpan di <code>~/.ollama/models/</code>. Dengan 512GB SSD dan kebutuhan sistem + aplikasi lain, idealnya jangan sampai lebih dari 50–80GB untuk model. Hapus model yang tidak dipakai dengan <code>ollama rm nama-model</code>.</p>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════
+     SWAP SETUP
+══════════════════════════════ -->
+<div class="section">
+  <div class="section-label">Memory Optimization</div>
+  <h2>Atur Swap — Lakukan Sekali</h2>
+
+  <div class="box orange">
+    <div class="box-label">Kenapa Perlu Swap?</div>
+    <p>Saat Ollama + Docker + VSCode + browser jalan bersamaan, RAM 16GB bisa mepet. Swap adalah "RAM cadangan" di SSD — lebih lambat dari RAM tapi mencegah sistem crash atau OOM (Out of Memory) killer yang tiba-tiba matikan proses.</p>
+  </div>
+
+  <div class="code-block">
+    <div class="code-header"><span class="code-lang">bash — Setup 12GB Swap (jalankan sekali)</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+    <pre class="code"><span class="cm"># Cek swap yang ada sekarang</span>
+swapon --show
+free -h
+
+<span class="cm"># Buat file swap 12GB</span>
+sudo fallocate -l 12G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+
+<span class="cm"># Supaya aktif setelah reboot — tambah ke /etc/fstab</span>
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+
+<span class="cm"># Verifikasi</span>
+free -h
+<span class="cm"># Harusnya sekarang ada Swap: 12.0G</span></pre>
+  </div>
+
+  <div class="code-block">
+    <div class="code-header"><span class="code-lang">bash — Tuning Swappiness (opsional tapi bagus)</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+    <pre class="code"><span class="cm"># Default swappiness = 60 (agresif pakai swap)
+# Turunkan ke 10 — pakai RAM semaksimal mungkin dulu</span>
+echo <span class="num">10</span> | sudo tee /proc/sys/vm/swappiness
+
+<span class="cm"># Permanen:</span>
+echo 'vm.swappiness=10' | sudo tee -a /etc/sysctl.conf</pre>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════
+     RESOURCE MONITORING
+══════════════════════════════ -->
+<div class="section">
+  <div class="section-label">Resource Monitoring</div>
+  <h2>Pantau Resource — Habit Wajib</h2>
+
+  <p style="font-size:13.5px;color:var(--dim);margin-bottom:14px;line-height:1.7">Biasakan buka monitor resource setiap kali mulai sesi AI. Ini akan membantu kamu mendeteksi bottleneck dan memahami kenapa kadang lambat.</p>
+
+  <div class="card">
+    <div class="card-title">📊 Tool Monitoring</div>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash — Install tools (sekali)</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+      <pre class="code">sudo apt install htop -y
+# nvtop / gpustat optional untuk non-NVIDIA   <span class="cm"># pantau GPU usage</span></pre>
+    </div>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash — Monitoring commands</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+      <pre class="code"><span class="cm"># RAM + CPU real-time (paling sering dipakai)</span>
+htop
+
+<span class="cm"># Ringkasan cepat RAM</span>
+free -h
+
+<span class="cm"># Model Ollama yang sedang loaded di memory</span>
+ollama ps
+
+<span class="cm"># Berapa RAM yang dipakai Ollama</span>
+ollama ps --json
+
+<span class="cm"># Docker container yang jalan + resource usage</span>
+docker stats
+
+<span class="cm"># Disk usage per folder</span>
+du -sh ~/.ollama/models/*
+du -sh ~/projects/*</pre>
+    </div>
+  </div>
+
+  <div class="box green">
+    <div class="box-label">💡 Tanda-tanda RAM Kritis</div>
+    <ul>
+      <li>Ollama jadi sangat lambat tiba-tiba → RAM mepet, model swap ke disk</li>
+      <li>Sistem terasa lag saat inference → tutup browser tab dan aplikasi lain</li>
+      <li>Docker container mati sendiri → OOM killer, perlu lebih banyak swap</li>
+      <li><code>free -h</code> menunjukkan available &lt; 1GB → bahaya, tutup aplikasi</li>
+    </ul>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════
+     BEFORE EACH SESSION
+══════════════════════════════ -->
+<div class="section">
+  
+<div class="box green">
+<div class="box-label">🟢 Ollama Service Check</div>
+<p>Di Ubuntu, Ollama sering otomatis berjalan sebagai service setelah install.</p>
+<div class="code-block">
+<div class="code-header"><span class="code-lang">bash — cek status</span></div>
+<pre class="code">systemctl status ollama</pre>
+</div>
+<p>Jika status <code>active (running)</code>, tidak perlu menjalankan <code>ollama serve</code> manual setiap sesi.</p>
+</div>
+<div class="section-label">Practical Habit</div>
+  <h2>Rutinitas Sebelum Sesi AI</h2>
+
+  <div class="card">
+    <div class="card-title">✅ Checklist Sebelum Mulai</div>
+    <ul class="checklist">
+      <li>Tutup tab browser yang tidak perlu (setiap tab = ~100MB)</li>
+      <li>Cek apakah Ollama service sudah aktif: <code>systemctl status ollama</code></li>
+      <li>Cek RAM kosong: <code>free -h</code> — pastikan &gt; 4GB available</li>
+      <li>Buat git branch baru sebelum AI mulai kerja</li>
+      <li>Commit baseline: <code>git commit -m "baseline"</code></li>
+      <li>Buka <code>htop</code> di terminal terpisah untuk monitoring</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🧹 Cleanup Setelah Sesi</div>
+    <ul class="checklist">
+      <li>Stop model dari memory jika tidak dipakai: <code>ollama stop qwen2.5-coder:7b</code></li>
+      <li>Stop Docker containers yang tidak perlu: <code>docker compose down</code></li>
+      <li>Review dan commit atau discard perubahan AI: <code>git status</code></li>
+    </ul>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════
+     ADDITIONAL SUPPORT NOTES
+══════════════════════════════ -->
+<div class="section">
+  <div class="section-label">Support Notes Tambahan</div>
+  <h2>Hal-hal yang Perlu Diketahui</h2>
+
+  <div class="card">
+    <div class="card-title">🌡️ Thermal & Battery</div>
+    <div class="box yellow">
+      <div class="box-label">Laptop + Inference = Panas</div>
+      <p>CPU inference itu berat. ThinkPad T14 punya cooling yang decent, tapi saat inference model 7B dalam waktu lama, CPU bisa throttle karena panas — yang membuat inference makin lambat.</p>
+    </div>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash — Monitor suhu CPU</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+      <pre class="code">sudo apt install lm-sensors -y
+sensors        <span class="cm"># lihat suhu semua komponen</span>
+watch sensors  <span class="cm"># update setiap 2 detik</span></pre>
+    </div>
+    <p style="font-size:13px;color:var(--dim);margin-top:10px">Tips: <strong>pakai charger saat inference</strong> — laptop mode baterai biasanya throttle CPU untuk hemat daya, membuat inference 2–3x lebih lambat.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📦 Disk Management</div>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash — Pantau dan bersihkan disk</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+      <pre class="code"><span class="cm"># Lihat penggunaan disk keseluruhan</span>
+df -h
+
+<span class="cm"># Folder apa yang paling besar</span>
+du -sh ~/* | sort -rh | head -10
+
+<span class="cm"># Bersihkan Docker yang tidak terpakai</span>
+docker system prune -a    <span class="cm"># HATI-HATI: hapus semua image unused</span>
+docker volume prune       <span class="cm"># hapus volume orphan</span>
+
+<span class="cm"># Hapus model Ollama yang tidak terpakai</span>
+ollama list               <span class="cm"># lihat semua model</span>
+ollama rm nama-model      <span class="cm"># hapus yang tidak dipakai</span>
+
+<span class="cm"># Bersihkan cache pip</span>
+pip cache purge</pre>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔧 Troubleshooting Umum</div>
+    <table class="tbl">
+      <tr><th>Masalah</th><th>Kemungkinan Penyebab</th><th>Solusi</th></tr>
+      <tr>
+        <td>Ollama sangat lambat</td>
+        <td>RAM hampir penuh, model swap ke disk</td>
+        <td>Tutup aplikasi lain, <code>free -h</code> untuk cek</td>
+      </tr>
+      <tr>
+        <td>Docker gagal start</td>
+        <td>Docker daemon tidak jalan</td>
+        <td><code>sudo systemctl start docker</code></td>
+      </tr>
+      <tr>
+        <td>OpenHands tidak bisa reach Ollama</td>
+        <td>URL salah dari dalam container</td>
+        <td>Gunakan <code>host.docker.internal:11434</code></td>
+      </tr>
+      <tr>
+        <td>Model OOM / killed</td>
+        <td>RAM tidak cukup</td>
+        <td>Pastikan swap aktif, coba model yang lebih kecil</td>
+      </tr>
+      <tr>
+        <td>Ollama port sudah dipakai</td>
+        <td>Instance Ollama lain masih jalan</td>
+        <td><code>pkill ollama</code> lalu <code>ollama serve</code></td>
+      </tr>
+      <tr>
+        <td>Inference hasilnya aneh</td>
+        <td>Context window overflow</td>
+        <td>Mulai conversation baru, clear context</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-title">⚡ Quick Performance Tips</div>
+    <div class="box green">
+      <div class="box-label">Cara Percepat Inference di CPU</div>
+      <ul>
+        <li>Set <code>num_ctx</code> sekecil yang cukup — context besar = lebih lambat. Untuk coding task biasanya 2048–4096 cukup</li>
+        <li>Model tetap loaded di memory setelah pertama dipanggil — request kedua dan seterusnya lebih cepat</li>
+        <li>Tutup semua app berat: Slack, Zoom, browser dengan banyak tab</li>
+        <li>Gunakan charger — jangan inference di mode baterai</li>
+        <li>Ollama secara default pakai semua CPU thread — tidak perlu konfigurasi tambahan</li>
+      </ul>
+    </div>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash — Set context kecil untuk coding task</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+      <pre class="code"><span class="cm"># Lewat Modelfile custom</span>
+cat > Modelfile << 'EOF'
+FROM qwen2.5-coder:7b
+PARAMETER num_ctx 4096
+PARAMETER num_thread 10
+EOF
+
+ollama create qwen-fast -f Modelfile
+ollama run qwen-fast</pre>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🌐 Koneksi Internet</div>
+    <p style="font-size:13.5px;color:var(--dim);line-height:1.7">Stack ini dirancang untuk offline — tapi beberapa hal masih butuh internet:</p>
+    <div class="two-col" style="margin-top:10px">
+      <div class="box red">
+        <div class="box-label">Butuh Internet</div>
+        <ul>
+          <li><code>ollama pull</code> — download model</li>
+          <li>Docker image pull pertama kali</li>
+          <li>Browser tool di OpenHands</li>
+          <li>LangSmith tracing</li>
+          <li><code>pip install</code></li>
+        </ul>
+      </div>
+      <div class="box green">
+        <div class="box-label">Bisa Offline</div>
+        <ul>
+          <li>Inference model yang sudah dipull</li>
+          <li>RAG dari dokumen lokal</li>
+          <li>FastAPI service</li>
+          <li>Semua coding task</li>
+          <li>Docker container yang sudah di-pull</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════
+     FIRST 30 MINUTES
+══════════════════════════════ -->
+<div class="section">
+  <div class="section-label">Action Plan</div>
+  <h2>🚀 Yang Pertama Dilakukan — 30 Menit Pertama</h2>
+
+  <div class="card">
+    <ul class="checklist">
+      <li>Setup swap 12GB (lihat section di atas)</li>
+      <li>Jalankan <code>ollama serve</code> di terminal terpisah</li>
+      <li>Pull model: <code>ollama pull qwen2.5-coder:7b</code></li>
+      <li>Pull embed: <code>ollama pull nomic-embed-text</code></li>
+      <li>Test chat pertama: <code>ollama run qwen2.5-coder:7b "halo, perkenalkan dirimu"</code></li>
+      <li>Catat berapa detik response pertama muncul</li>
+      <li>Jalankan OpenHands via Docker</li>
+      <li>Kasih task pertama ke OpenHands: <em>"buat file hello.py yang print nama kamu"</em></li>
+      <li>Observasi: apa yang AI lakukan step by step?</li>
+      <li>Catat pengamatan kamu di dokumentasi</li>
+    </ul>
+  </div>
+
+  <div class="box purple">
+    <div class="box-label">📝 Hal yang Dicatat Setelah Sesi Pertama</div>
+    <p>Tulis jawaban pertanyaan ini di dokumentasi kamu sendiri:</p>
+    <ul>
+      <li>Berapa detik response pertama dari model 7B?</li>
+      <li>Task apa yang berhasil dilakukan OpenHands dengan benar?</li>
+      <li>Kapan AI mulai terasa "halu" atau tidak akurat?</li>
+      <li>Berapa RAM yang terpakai saat Ollama + OpenHands jalan bersamaan?</li>
+    </ul>
+    <p style="margin-top:8px">Jawaban-jawaban ini akan membuat dokumentasimu jadi <strong>living doc</strong> — bukan hanya referensi, tapi catatan pengalaman nyata.</p>
+  </div>
+</div>
+
+
+<!-- FOOTER -->
+<div class="footer">
+  <span>Praktik Start Notes · ThinkPad T14 Gen 4 · Arief</span>
+  <span>2026-05-23 · Companion doc untuk AI Engineer Stack v3</span>
+</div>
+
+<script>
+function copyCode(btn) {
+  const pre = btn.closest('.code-block').querySelector('pre.code');
+  navigator.clipboard.writeText(pre.innerText).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = 'copied!';
+    btn.style.color = 'var(--green)';
+    setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 1500);
+  });
+}
+</script>
+</body>
+</html>
