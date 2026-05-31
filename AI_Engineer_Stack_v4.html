@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI Engineer Stack — v3 Practical Edition</title>
+<title>AI Engineer Stack — v4 Practical Edition</title>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -178,7 +178,7 @@
 <nav class="sidebar">
   <div class="sidebar-logo">
     <div class="title">AI Engineer Stack</div>
-    <div class="sub">// v3 · Practical Edition</div>
+    <div class="sub">// v4 · Practical Edition</div>
   </div>
 
   <div class="nav-section">Infra Foundation</div>
@@ -188,7 +188,7 @@
   <a class="nav-item done" href="#s04"><span class="dot"></span>04 · Git Safety</a>
 
   <div class="nav-section">AI Goes Brrrr</div>
-  <a class="nav-item warn" href="#s05"><span class="dot"></span>05 · OpenHands Runtime</a>
+  <a class="nav-item warn" href="#s05"><span class="dot"></span>05 · OpenCode</a>
   <a class="nav-item warn" href="#s06"><span class="dot"></span>06 · Prompt Engineering</a>
 
   <div class="nav-section">Build Stack</div>
@@ -212,9 +212,9 @@
 
   <!-- HERO -->
   <div class="hero">
-    <div class="hero-badge">⚡ v3 · Practical-First Edition · Revised by Arief</div>
+    <div class="hero-badge">⚡ v4 · Practical-First Edition · Revised by Arief</div>
     <h1>AI Engineer<br>Stack Architecture</h1>
-    <p>Direvisi dari v2 — urutan diubah agar AI jalan duluan. Tambahan: OpenHands Runtime lengkap, Model Context Protocol (MCP), dan Trust Model. Belajar dengan megang dulu, teori menyusul.</p>
+    <p>Direvisi dari v2 — urutan diubah agar AI jalan duluan. Tambahan: OpenCode Runtime lengkap, Model Context Protocol (MCP), dan Trust Model. Belajar dengan megang dulu, teori menyusul.</p>
     <div class="hero-meta">
       <div class="hero-meta-item">Author: <span>Arief</span></div>
       <div class="hero-meta-item">Revised: <span>2026-05-23</span></div>
@@ -230,7 +230,7 @@
       <div class="flow-arrow">→</div>
       <div class="flow-step done">✓ Ollama + Model</div>
       <div class="flow-arrow">→</div>
-      <div class="flow-step current">▶ OpenHands</div>
+      <div class="flow-step current">▶ OpenCode (terminal)</div>
       <div class="flow-arrow">→</div>
       <div class="flow-step next">Prompt Eng</div>
       <div class="flow-arrow">→</div>
@@ -397,7 +397,7 @@ git checkout main && git branch -D ai/nama-task</pre>
   <div class="section" id="s05">
     <div class="section-header">
       <span class="section-num">05</span>
-      <h2>⭐ OpenHands <span class="ac">Runtime</span></h2>
+      <h2>⭐ OpenCode <span class="ac">Runtime</span></h2>
     </div>
     <div class="tag-row">
       <span class="tag tag-warn">▶ Mulai di Sini</span>
@@ -405,7 +405,7 @@ git checkout main && git branch -D ai/nama-task</pre>
       <span class="tag tag-info">Agentic AI</span>
     </div>
     <p class="section-desc">
-      OpenHands adalah agentic framework — AI yang bisa berpikir, menulis kode, menjalankannya, membuka browser, dan iterasi sendiri. Ini tempat kamu merasakan langsung bagaimana AI bekerja sebagai "junior developer" sebelum memahami cara membangun sistem serupa dari bawah.
+      OpenCode adalah agentic framework — AI yang bisa berpikir, menulis kode, menjalankannya, membuka browser, dan iterasi sendiri. Ini tempat kamu merasakan langsung bagaimana AI bekerja sebagai "junior developer" sebelum memahami cara membangun sistem serupa dari bawah.
     </p>
 
     <!-- 5.1 INSTALL -->
@@ -414,22 +414,21 @@ git checkout main && git branch -D ai/nama-task</pre>
       <div class="card">
         <div class="code-block">
           <div class="code-header"><span class="code-lang">bash — Docker (cara termudah)</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
-          <pre class="code"><span class="cm"># Pull image OpenHands</span>
-docker pull ghcr.io/all-hands-ai/openhands:main
+          <pre class="code"><span class="cm"># Pull image OpenCode</span>
+npm install -g opencode-ai
 
 <span class="cm"># Jalankan (Linux/Mac)</span>
 docker run -it --rm \
   -e SANDBOX_RUNTIME_CONTAINER_IMAGE=docker.io/nikolaik/python-nodejs:python3.12-nodejs22 \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -p 3000:3000 \
-  ghcr.io/all-hands-ai/openhands:main
 
-<span class="cm"># Buka browser → http://localhost:3000</span></pre>
+<span class="cm"># Jalankan: opencode</span></pre>
         </div>
         <div class="code-block">
           <div class="code-header"><span class="code-lang">bash — Alternatif: pip install</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
-          <pre class="code">pip install openhands-ai
-openhands --help</pre>
+          <pre class="code">npm install -g opencode-ai
+opencode --help</pre>
         </div>
       </div>
     </div>
@@ -438,7 +437,7 @@ openhands --help</pre>
     <div class="subsection">
       <div class="subsection-title"><span class="icon">🏖️</span> 5.2 Sandbox Philosophy</div>
       <div class="card">
-        <p class="section-desc" style="margin:0">OpenHands menjalankan semua aksi AI di dalam <strong>Docker container terpisah</strong> — bukan di sistem kamu langsung. Ini adalah desain keamanan fundamental.</p>
+        <p class="section-desc" style="margin:0">OpenCode menjalankan semua aksi AI di dalam <strong>Docker container terpisah</strong> — bukan di sistem kamu langsung. Ini adalah desain keamanan fundamental.</p>
         <div class="concept-box green">
           <div class="concept-label">Kenapa Sandbox?</div>
           <ul style="padding-left:16px;margin-top:4px">
@@ -451,7 +450,7 @@ openhands --help</pre>
         <div class="arch-diagram" style="margin-top:14px">
           <div class="arch-layer"><span class="arch-layer-name" style="color:var(--text)">Host System (kamu)</span><span class="arch-layer-desc">↔ hanya expose project folder</span></div>
           <div style="padding-left:20px;color:var(--border2)">│</div>
-          <div class="arch-layer"><span class="arch-layer-name" style="color:var(--cyan)">OpenHands Container</span><span class="arch-layer-desc">agent logic, UI, orchestration</span></div>
+          <div class="arch-layer"><span class="arch-layer-name" style="color:var(--cyan)">OpenCode Container</span><span class="arch-layer-desc">agent logic, UI, orchestration</span></div>
           <div style="padding-left:20px;color:var(--border2)">│</div>
           <div class="arch-layer"><span class="arch-layer-name" style="color:var(--orange)">Sandbox Container</span><span class="arch-layer-desc">eksekusi kode, terminal, browser</span></div>
           <div style="padding-left:20px;color:var(--border2)">│</div>
@@ -464,9 +463,9 @@ openhands --help</pre>
     <div class="subsection">
       <div class="subsection-title"><span class="icon">🔌</span> 5.3 Model Connection</div>
       <div class="card">
-        <p style="font-size:13.5px;color:var(--text-dim);margin-bottom:12px">Konfigurasi di UI OpenHands (<code>http://localhost:3000</code>) → Settings → LLM:</p>
+        <p style="font-size:13.5px;color:var(--text-dim);margin-bottom:12px">Konfigurasi OpenCode — buka terminal di direktori project-mu, lalu:</p>
         <div class="code-block">
-          <div class="code-header"><span class="code-lang">config — OpenHands Settings</span></div>
+          <div class="code-header"><span class="code-lang">config — OpenCode Settings</span></div>
           <pre class="code">LLM Provider  : Ollama
 Model         : ollama/qwen2.5-coder:14b
 Base URL      : http://host.docker.internal:11434
@@ -484,7 +483,7 @@ Max Tokens    : 4096</pre>
     <div class="subsection">
       <div class="subsection-title"><span class="icon">🌐</span> 5.4 Browser & Tool Use</div>
       <div class="card">
-        <p style="font-size:13.5px;color:var(--text-dim);margin-bottom:12px">OpenHands memberi model AI akses ke tools berikut secara built-in:</p>
+        <p style="font-size:13.5px;color:var(--text-dim);margin-bottom:12px">OpenCode memberi model AI akses ke tools berikut secara built-in:</p>
         <table class="tbl">
           <tr><th>Tool</th><th>Fungsi</th><th>Contoh use case</th></tr>
           <tr><td><strong>Terminal</strong></td><td>Eksekusi shell command</td><td>Install deps, run tests, jalankan server</td></tr>
@@ -494,7 +493,7 @@ Max Tokens    : 4096</pre>
         </table>
         <div class="concept-box">
           <div class="concept-label">💡 Yang Perlu Diperhatikan</div>
-          <p>AI akan membuka browser dan berinteraksi secara otomatis. Pantau apa yang dibuka — terutama jika task melibatkan akun atau credential. Selalu gunakan browser sandbox, jangan login akun personal di sesi OpenHands.</p>
+          <p>AI akan membuka browser dan berinteraksi secara otomatis. Pantau apa yang dibuka — terutama jika task melibatkan akun atau credential. Selalu gunakan browser sandbox, jangan login akun personal di sesi OpenCode.</p>
         </div>
       </div>
     </div>
@@ -503,7 +502,7 @@ Max Tokens    : 4096</pre>
     <div class="subsection">
       <div class="subsection-title"><span class="icon">✅</span> 5.5 Approval Flow</div>
       <div class="card">
-        <p style="font-size:13.5px;color:var(--text-dim);margin-bottom:12px">OpenHands punya mode <strong>confirmation mode</strong> — AI akan pause dan minta approval sebelum aksi destructive:</p>
+        <p style="font-size:13.5px;color:var(--text-dim);margin-bottom:12px">OpenCode punya mode <strong>confirmation mode</strong> — AI akan pause dan minta approval sebelum aksi destructive:</p>
         <div class="concept-box green">
           <div class="concept-label">Aktifkan di Settings</div>
           <p>Settings → Agent → <strong>Confirmation Mode: ON</strong>. Dengan ini, setiap kali AI mau jalankan command atau hapus file, kamu harus approve dulu. Sangat direkomendasikan saat belajar.</p>
@@ -596,13 +595,13 @@ git checkout ai/task -- src/specific_file.py  <span class="cm"># cherry-pick fil
             <div class="step-num">1</div>
             <div class="step-content">
               <div class="step-title">Prepare</div>
-              <div class="step-desc">Buat branch baru: <code>git checkout -b ai/buat-fungsi-parser</code>. Commit baseline: <code>git commit -m "baseline"</code>. Aktifkan confirmation mode di OpenHands.</div>
+              <div class="step-desc">Buat branch baru: <code>git checkout -b ai/buat-fungsi-parser</code>. Commit baseline: <code>git commit -m "baseline"</code>. Aktifkan confirmation mode di OpenCode.</div>
             </div>
           </div>
           <div class="step">
             <div class="step-num">2</div>
             <div class="step-content">
-              <div class="step-title">Write Task (di chat OpenHands)</div>
+              <div class="step-title">Write Task (di chat OpenCode)</div>
               <div class="step-desc">Tulis task yang spesifik: <em>"Buat file <code>src/parser.py</code> berisi fungsi <code>parse_csv(filepath)</code> yang menerima path file CSV dan return list of dict. Tambahkan error handling dan type hints."</em></div>
             </div>
           </div>
@@ -645,8 +644,8 @@ git checkout ai/task -- src/specific_file.py  <span class="cm"># cherry-pick fil
       <span class="section-num">06</span>
       <h2>Prompt <span class="ac">Engineering</span></h2>
     </div>
-    <div class="tag-row"><span class="tag tag-warn">Setelah OpenHands</span><span class="tag tag-new">★ Core Skill</span></div>
-    <p class="section-desc">Setelah merasakan bagaimana AI bekerja di OpenHands, kamu akan mulai menyadari: <em>cara kamu menulis task sangat menentukan hasilnya</em>. Itulah prompt engineering — bukan trik, tapi komunikasi yang presisi.</p>
+    <div class="tag-row"><span class="tag tag-warn">Setelah OpenCode</span><span class="tag tag-new">★ Core Skill</span></div>
+    <p class="section-desc">Setelah merasakan bagaimana AI bekerja di OpenCode, kamu akan mulai menyadari: <em>cara kamu menulis task sangat menentukan hasilnya</em>. Itulah prompt engineering — bukan trik, tapi komunikasi yang presisi.</p>
 
     <div class="card">
       <div class="card-title">🏗️ Anatomi Prompt yang Baik</div>
@@ -972,7 +971,7 @@ pip install mcp-server-playwright</pre>
         </div>
         <div class="concept-box">
           <div class="concept-label">Use Cases</div>
-          <p>Scraping dokumentasi → masuk ke RAG. Testing UI otomatis. Monitoring halaman web. Research dan summarize artikel. OpenHands sudah include browser tool ini secara default.</p>
+          <p>Scraping dokumentasi → masuk ke RAG. Testing UI otomatis. Monitoring halaman web. Research dan summarize artikel. OpenCode sudah include browser tool ini secara default.</p>
         </div>
       </div>
     </div>
@@ -1038,14 +1037,14 @@ pip install mcp-server-playwright</pre>
       <div class="card">
         <div class="concept-box purple">
           <div class="concept-label">MCP adalah "Tangan" untuk Agent</div>
-          <p>Agent (seperti OpenHands) adalah <em>otak yang memutuskan apa yang harus dilakukan</em>. MCP adalah <em>tangan yang melakukannya</em>. Tanpa MCP, agent hanya bisa generate teks. Dengan MCP, agent bisa benar-benar berinteraksi dengan dunia: baca file, panggil API, push kode, kirim notifikasi.</p>
+          <p>Agent (seperti OpenCode) adalah <em>otak yang memutuskan apa yang harus dilakukan</em>. MCP adalah <em>tangan yang melakukannya</em>. Tanpa MCP, agent hanya bisa generate teks. Dengan MCP, agent bisa benar-benar berinteraksi dengan dunia: baca file, panggil API, push kode, kirim notifikasi.</p>
         </div>
         <table class="tbl">
           <tr><th>Komponen</th><th>Peran</th><th>Contoh</th></tr>
           <tr><td>LLM</td><td>Reasoning & planning</td><td>Qwen, Claude, GPT</td></tr>
-          <tr><td>Agent Framework</td><td>Orchestrate tool calls</td><td>OpenHands, LangChain</td></tr>
+          <tr><td>Agent Framework</td><td>Orchestrate tool calls</td><td>OpenCode, LangChain</td></tr>
           <tr><td>MCP Server</td><td>Provide tools</td><td>filesystem, github, browser</td></tr>
-          <tr><td>MCP Client</td><td>Connect agent ke server</td><td>Built-in di OpenHands/Claude</td></tr>
+          <tr><td>MCP Client</td><td>Connect agent ke server</td><td>Built-in di OpenCode/Claude</td></tr>
         </table>
       </div>
     </div>
@@ -1277,7 +1276,7 @@ pip install mcp-server-playwright</pre>
     <div class="card">
       <div class="card-title">📅 Sprint 2 Minggu</div>
       <div class="step-list">
-        <div class="step"><div class="step-num">1</div><div class="step-content"><div class="step-title">Hari 1–2: OpenHands + Eksplorasi</div><div class="step-desc">Jalankan OpenHands, kasih task sederhana, observasi cara AI bekerja. Catat: kapan AI bagus, kapan AI halu.</div></div></div>
+        <div class="step"><div class="step-num">1</div><div class="step-content"><div class="step-title">Hari 1–2: OpenCode + Eksplorasi</div><div class="step-desc">Jalankan OpenCode, kasih task sederhana, observasi cara AI bekerja. Catat: kapan AI bagus, kapan AI halu.</div></div></div>
         <div class="step"><div class="step-num">2</div><div class="step-content"><div class="step-title">Hari 3–4: RAG Dasar</div><div class="step-desc">Index 1-2 PDF. Buat script terminal yang bisa menjawab pertanyaan dari dokumen tersebut.</div></div></div>
         <div class="step"><div class="step-num">3</div><div class="step-content"><div class="step-title">Hari 5–7: FastAPI</div><div class="step-desc">Wrap RAG ke endpoint. Test via <code>/docs</code>. Tambahkan logging.</div></div></div>
         <div class="step"><div class="step-num">4</div><div class="step-content"><div class="step-title">Hari 8–10: Frontend</div><div class="step-desc">HTML + JS vanilla sederhana. Form input, kirim ke API, tampilkan jawaban.</div></div></div>
@@ -1298,7 +1297,7 @@ pip install mcp-server-playwright</pre>
     <div class="card">
       <div class="card-title">Phase 1 — Practical Feel (Sekarang)</div>
       <ul class="checklist">
-        <li>Jalankan OpenHands, kasih 10 task berbeda — observasi dan catat</li>
+        <li>Jalankan OpenCode, kasih 10 task berbeda — observasi dan catat</li>
         <li>Kuasai Prompt Engineering dari eksplorasi langsung</li>
         <li>Bangun RAG system pertama end-to-end</li>
       </ul>
@@ -1328,8 +1327,8 @@ pip install mcp-server-playwright</pre>
 
   <!-- FOOTER -->
   <div class="footer">
-    <span>AI Engineer Stack v3 · Practical Edition · Arief</span>
-    <span>Revised 2026-05-23 · Added: OpenHands Runtime, MCP, Trust Model</span>
+    <span>AI Engineer Stack v4 · Practical Edition · Arief</span>
+    <span>Revised 2026-05-31 · Updated: OpenHands → OpenCode, MCP, Trust Model</span>
   </div>
 
 </main>
