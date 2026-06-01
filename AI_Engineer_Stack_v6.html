@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI Engineer Stack — v5 Practical Edition</title>
+<title>AI Engineer Stack — v6 Practical Edition</title>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -178,21 +178,22 @@
 <nav class="sidebar">
   <div class="sidebar-logo">
     <div class="title">AI Engineer Stack</div>
-    <div class="sub">// v5 · Practical Edition</div>
+    <div class="sub">// v6 · Practical Edition</div>
   </div>
 
+  <a class="nav-item new" href="#s00"><span class="dot"></span>00 · Big Picture</a>
   <div class="nav-section">Infra Foundation</div>
   <a class="nav-item done" href="#s01"><span class="dot"></span>01 · Dev Environment</a>
   <a class="nav-item done" href="#s02"><span class="dot"></span>02 · Ollama + Model</a>
   <a class="nav-item done" href="#s03"><span class="dot"></span>03 · Docker Sandbox</a>
   <a class="nav-item done" href="#s04"><span class="dot"></span>04 · Git Safety</a>
 
-  <div class="nav-section">AI Goes Brrrr</div>
-  <a class="nav-item warn" href="#s05"><span class="dot"></span>05 · OpenCode</a>
+  <div class="nav-section">Agent Runtime</div>
+  <a class="nav-item warn" href="#s05"><span class="dot"></span>05 · Agent Runtime</a>
   <a class="nav-item warn" href="#s06"><span class="dot"></span>06 · Prompt Engineering</a>
 
   <div class="nav-section">Build Stack</div>
-  <a class="nav-item gap" href="#s07"><span class="dot"></span>07 · Orchestration</a>
+  <a class="nav-item gap" href="#s07"><span class="dot"></span>07 · Orchestration & Pipeline</a>
   <a class="nav-item gap" href="#s08"><span class="dot"></span>08 · RAG System</a>
   <a class="nav-item gap" href="#s09"><span class="dot"></span>09 · API Layer</a>
 
@@ -212,7 +213,7 @@
 
   <!-- HERO -->
   <div class="hero">
-    <div class="hero-badge">⚡ v5 · Practical-First Edition · Revised by Arief</div>
+    <div class="hero-badge">⚡ v6 · Practical-First Edition · Revised by Arief</div>
     <h1>AI Engineer<br>Stack Architecture</h1>
     <p>Direvisi dari v2 — urutan diubah agar AI jalan duluan. Tambahan: OpenCode Runtime lengkap, Model Context Protocol (MCP), dan Trust Model. Belajar dengan megang dulu, teori menyusul.</p>
     <div class="hero-meta">
@@ -245,6 +246,67 @@
       <div class="flow-step next">Trust + Eval</div>
     </div>
   </div>
+
+  <!-- ══════════════════════════════════
+       STACK BOUNDARY DIAGRAM
+  ══════════════════════════════════ -->
+  <div class="section" id="s00">
+    <div class="section-header">
+      <span class="section-num">00</span>
+      <h2>Arsitektur — <span class="ac">Big Picture</span></h2>
+    </div>
+    <div class="tag-row"><span class="tag tag-info">Baca Ini Dulu</span></div>
+    <p class="section-desc">Sebelum masuk ke tools dan kode, pahami dulu tanggung jawab masing-masing layer. Laravel <strong>tidak digantikan</strong> oleh AI — AI <em>memperluas</em> sistem backend yang sudah ada.</p>
+
+    <div class="card">
+      <div class="card-title">🏗️ Stack Boundary — Siapa Mengerjakan Apa</div>
+      <div class="arch-diagram">
+        <div class="arch-layer"><span class="arch-layer-name" style="color:var(--cyan)">Frontend / Product Layer</span><span class="arch-layer-desc">React, Vue, HTML — UI, interaksi user</span></div>
+        <div style="padding-left:20px;color:var(--border2)">│</div>
+        <div class="arch-layer"><span class="arch-layer-name" style="color:var(--green)">Laravel / Node Backend</span><span class="arch-layer-desc">Auth, business rules, API, product logic, application layer</span></div>
+        <div style="padding-left:20px;color:var(--border2)">│ ← HTTP / Queue →</div>
+        <div class="arch-layer"><span class="arch-layer-name" style="color:var(--orange)">Python AI Service</span><span class="arch-layer-desc">Orchestration, RAG, inference, model workflows, LangChain</span></div>
+        <div style="padding-left:20px;color:var(--border2)">│</div>
+        <div class="arch-layer"><span class="arch-layer-name" style="color:var(--purple)">LLM / RAG / MCP</span><span class="arch-layer-desc">DeepSeek, Claude, Ollama — reasoning, embedding, tool use</span></div>
+      </div>
+      <div class="two-col" style="margin-top:14px">
+        <div class="concept-box green">
+          <div class="concept-label">Laravel / Node — Tanggung Jawabnya</div>
+          <ul style="padding-left:16px;margin-top:4px">
+            <li style="font-size:13px;color:var(--text-dim);margin-bottom:4px">Auth, session, permission</li>
+            <li style="font-size:13px;color:var(--text-dim);margin-bottom:4px">Business rules dan validasi</li>
+            <li style="font-size:13px;color:var(--text-dim);margin-bottom:4px">Database dan ORM</li>
+            <li style="font-size:13px;color:var(--text-dim)">Queue, job, notifikasi</li>
+          </ul>
+        </div>
+        <div class="concept-box orange">
+          <div class="concept-label">Python AI Service — Tanggung Jawabnya</div>
+          <ul style="padding-left:16px;margin-top:4px">
+            <li style="font-size:13px;color:var(--text-dim);margin-bottom:4px">Pipeline RAG dan retrieval</li>
+            <li style="font-size:13px;color:var(--text-dim);margin-bottom:4px">Orchestration dan chaining</li>
+            <li style="font-size:13px;color:var(--text-dim);margin-bottom:4px">Inferensi dan embedding</li>
+            <li style="font-size:13px;color:var(--text-dim)">Eval, observability, monitoring</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="card-title">🧭 Filosofi Tools</div>
+      <div class="concept-box purple">
+        <div class="concept-label">Tools bersifat sementara. Konsep bersifat tahan lama.</div>
+        <p>LangChain, DeepSeek, OpenCode — semua tool ini akan terus berevolusi dan berganti. Yang tidak berubah adalah cara berpikir: <strong>pipeline thinking, eval mindset, safety first, architecture-oriented</strong>. Dokumen ini mengajarkan konsep, bukan tool fandom. Gunakan tool yang paling sesuai untuk kebutuhan — bukan karena tren.</p>
+      </div>
+      <table class="tbl" style="margin-top:12px">
+        <tr><th>Saat ini</th><th>Bisa diganti dengan</th><th>Konsep yang tetap sama</th></tr>
+        <tr><td>DeepSeek</td><td>Claude, GPT, Gemini</td><td>LLM provider, OpenAI-compatible API</td></tr>
+        <tr><td>OpenCode</td><td>Claude Code, Cursor, Codex</td><td>Agent runtime, tool use, approval flow</td></tr>
+        <tr><td>LangChain</td><td>LlamaIndex, plain SDK, custom</td><td>Orchestration, chaining, memory</td></tr>
+        <tr><td>Qdrant</td><td>pgvector, Weaviate, Pinecone</td><td>Vector DB, similarity search</td></tr>
+      </table>
+    </div>
+  </div>
+  <hr class="divider">
 
   <!-- ══════════════════════════════════
        01 DEV ENVIRONMENT
@@ -397,7 +459,7 @@ git checkout main && git branch -D ai/nama-task</pre>
   <div class="section" id="s05">
     <div class="section-header">
       <span class="section-num">05</span>
-      <h2>⭐ OpenCode <span class="ac">Runtime</span></h2>
+      <h2>⭐ Agent Runtime — <span class="ac">OpenCode</span></h2>
     </div>
     <div class="tag-row">
       <span class="tag tag-warn">▶ Mulai di Sini</span>
@@ -542,7 +604,7 @@ opencode --help</pre>
         <p style="font-size:13.5px;color:var(--text-dim);margin-bottom:12px">AI <em>akan</em> gagal. Ini normal. Yang penting adalah bagaimana kamu merespons:</p>
         <div class="two-col">
           <div class="concept-box red">
-            <div class="concept-label">Tanda AI Sedang Halu</div>
+            <div class="concept-label">Pola Kegagalan Agent</div>
             <ul style="padding-left:16px;margin-top:4px">
               <li style="font-size:13px;color:var(--text-dim);margin-bottom:4px">Import library yang tidak ada</li>
               <li style="font-size:13px;color:var(--text-dim);margin-bottom:4px">Loop tanpa progress (stuck)</li>
@@ -716,13 +778,58 @@ CONSTRAINTS → Tanpa external library, type hints wajib</pre>
   <div class="section" id="s07">
     <div class="section-header">
       <span class="section-num">07</span>
-      <h2>Orchestration — <span class="ac">LangChain</span></h2>
+      <h2>Orchestration — <span class="ac">Pipeline AI</span></h2>
     </div>
     <div class="tag-row"><span class="tag tag-gap">Butuh Python</span><span class="tag tag-new">★ Build Layer</span></div>
-    <p class="section-desc">Orchestration adalah layer yang memungkinkan kamu membangun pipeline AI secara programatik — chain prompts, manage memory, parse output terstruktur. LangChain adalah framework paling populer untuk ini.</p>
+    <p class="section-desc">Orchestration adalah cara kamu membangun pipeline AI secara programatik. Dimulai dari yang paling sederhana: plain Python dan SDK langsung — sebelum masuk ke framework seperti LangChain. Banyak sistem AI production dibangun dengan pendekatan ringan tanpa framework berat.</p>
 
+    <!-- Plain Python / SDK First -->
     <div class="card">
-      <div class="card-title">🦜 Setup LangChain — Hybrid: DeepSeek (cloud) + Ollama (lokal)</div>
+      <div class="card-title">🐍 Mulai dari yang Paling Sederhana — Plain Python + SDK</div>
+      <p style="font-size:13.5px;color:var(--text-dim);margin-bottom:12px">Sebelum pakai framework, pahami dulu pola dasarnya. Banyak sistem AI production hanya butuh ini:</p>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">bash</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+        <pre class="code">pip install openai python-dotenv</pre>
+      </div>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">python — pipeline_sederhana.py</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
+        <pre class="code"><span class="kw">from</span> openai <span class="kw">import</span> OpenAI
+<span class="kw">from</span> dotenv <span class="kw">import</span> load_dotenv
+<span class="kw">import</span> os
+
+<span class="fn">load_dotenv</span>()
+
+<span class="cm"># SDK langsung — tidak butuh framework</span>
+<span class="var">client</span> = <span class="fn">OpenAI</span>(
+    api_key=os.<span class="fn">getenv</span>(<span class="str">"DEEPSEEK_API_KEY"</span>),
+    base_url=<span class="str">"https://api.deepseek.com/v1"</span>
+)
+
+<span class="kw">def</span> <span class="fn">review_code</span>(code: <span class="fn">str</span>, focus: <span class="fn">str</span>) -> <span class="fn">str</span>:
+    <span class="cm"># Pola dasar: prompt → model → parse → return</span>
+    response = client.chat.completions.<span class="fn">create</span>(
+        model=<span class="str">"deepseek-chat"</span>,
+        temperature=<span class="num">0.1</span>,
+        messages=[
+            {<span class="str">"role"</span>: <span class="str">"system"</span>, <span class="str">"content"</span>: <span class="str">"Kamu adalah code reviewer. Jawab dalam Bahasa Indonesia."</span>},
+            {<span class="str">"role"</span>: <span class="str">"user"</span>, <span class="str">"content"</span>: <span class="str">f"Review kode ini:\n{code}\n\nFokus pada: {focus}"</span>}
+        ]
+    )
+    <span class="kw">return</span> response.choices[<span class="num">0</span>].message.content
+
+<span class="var">result</span> = <span class="fn">review_code</span>(<span class="str">"def add(a,b): return a+b"</span>, <span class="str">"type hints dan docstring"</span>)
+<span class="fn">print</span>(result)</pre>
+      </div>
+      <div class="concept-box">
+        <div class="concept-label">💡 Kapan Cukup Plain Python?</div>
+        <p>Jika pipeline-mu adalah: <strong>input → prompt → LLM → output</strong> — plain SDK sudah cukup. Tambahkan framework hanya ketika kamu butuh: memory antar turn, retrieval otomatis, chaining kompleks, atau multi-step agent. Jangan over-engineer dari awal.</p>
+      </div>
+    </div>
+
+    <!-- LangChain sebagai advanced option -->
+    <div class="card" style="margin-top:16px">
+      <div class="card-title">🦜 LangChain — Ketika Pipeline Mulai Kompleks</div>
+      <p style="font-size:13.5px;color:var(--text-dim);margin-bottom:12px">LangChain berguna ketika kamu butuh abstraksi untuk pipeline yang lebih kompleks. Ini <strong>opsional</strong>, bukan mandatory.</p>
       <div class="code-block">
         <div class="code-header"><span class="code-lang">bash</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
         <pre class="code">pip install langchain langchain-community langchain-ollama langchain-core langchain-openai python-dotenv</pre>
@@ -1262,30 +1369,67 @@ pip install mcp-server-playwright</pre>
       <h2>Eval & <span class="ao">Observability</span></h2>
     </div>
     <div class="tag-row"><span class="tag tag-gap">✗ Belum Ada</span><span class="tag tag-new">★ Engineer vs Hobbyist</span></div>
+    <p class="section-desc">Sistem AI yang baik bukan yang menghasilkan jawaban yang terdengar bagus — tapi yang bisa <strong>diukur, dipercaya, dan di-maintain</strong>. Ini yang membedakan AI engineer dari AI user.</p>
+
+    <div class="concept-box purple" style="margin-bottom:20px">
+      <div class="concept-label">Mindset — Sistem AI Dievaluasi, Bukan Sekadar Diprompt</div>
+      <p>Siapapun bisa mendapat jawaban yang terlihat bagus dari LLM. AI engineer memastikan jawaban itu <strong>benar, konsisten, terukur, dan bisa dipercaya di production</strong>. Eval adalah cara kamu membuktikan itu.</p>
+    </div>
+
     <div class="card">
+      <div class="card-title">📊 Dimensi Evaluasi — Apa yang Harus Diukur</div>
+      <table class="tbl">
+        <tr><th>Dimensi</th><th>Pertanyaan</th><th>Cara Ukur</th></tr>
+        <tr><td><strong>Groundedness</strong></td><td>Apakah jawaban berasal dari dokumen?</td><td>Cek apakah klaim ada di retrieved chunks</td></tr>
+        <tr><td><strong>Relevance</strong></td><td>Apakah retrieval mengambil chunk yang tepat?</td><td>Manual review top-K results</td></tr>
+        <tr><td><strong>Hallucination</strong></td><td>Apakah AI mengarang fakta?</td><td>Bandingkan output vs sumber</td></tr>
+        <tr><td><strong>Latency</strong></td><td>Berapa lama response time?</td><td>time.time() atau middleware timing</td></tr>
+        <tr><td><strong>Cost</strong></td><td>Berapa token yang dipakai per request?</td><td>usage.total_tokens dari API response</td></tr>
+        <tr><td><strong>Regression</strong></td><td>Apakah perubahan merusak yang sebelumnya benar?</td><td>Jalankan test suite setiap perubahan</td></tr>
+      </table>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="card-title">🧪 Implementasi Eval — Dari Sederhana ke Terstruktur</div>
       <div class="code-block">
         <div class="code-header"><span class="code-lang">python — eval_rag.py</span><button class="code-copy" onclick="copyCode(this)">copy</button></div>
         <pre class="code"><span class="kw">from</span> dataclasses <span class="kw">import</span> dataclass
+<span class="kw">import</span> time
 
 <span class="kw">@dataclass</span>
 <span class="kw">class</span> <span class="fn">TestCase</span>:
     question: <span class="fn">str</span>
     expected_keywords: list[<span class="fn">str</span>]
+    max_latency_ms: <span class="fn">int</span> = <span class="num">3000</span>  <span class="cm"># SLA latency</span>
 
 <span class="var">tests</span> = [
-    <span class="fn">TestCase</span>(<span class="str">"Apa itu Ollama?"</span>, [<span class="str">"ollama"</span>, <span class="str">"local"</span>, <span class="str">"model"</span>]),
-    <span class="fn">TestCase</span>(<span class="str">"RAM untuk 7B?"</span>, [<span class="str">"16gb"</span>, <span class="str">"ram"</span>]),
+    <span class="fn">TestCase</span>(<span class="str">"Apa isi dokumen ini?"</span>, [<span class="str">"dokumen"</span>, <span class="str">"informasi"</span>, <span class="str">"konten"</span>]),
+    <span class="fn">TestCase</span>(<span class="str">"Apa kesimpulan dokumen?"</span>, [<span class="str">"kesimpulan"</span>, <span class="str">"hasil"</span>]),
 ]
 
 <span class="kw">def</span> <span class="fn">evaluate</span>(chain, tests):
     <span class="var">scores</span> = []
     <span class="kw">for</span> tc <span class="kw">in</span> tests:
-        answer = chain.invoke(tc.question)
-        score = <span class="fn">sum</span>(<span class="num">1</span> <span class="kw">for</span> kw <span class="kw">in</span> tc.expected_keywords
+        <span class="var">start</span> = time.<span class="fn">time</span>()
+        <span class="var">answer</span> = chain.<span class="fn">invoke</span>(tc.question)
+        <span class="var">latency_ms</span> = <span class="fn">int</span>((time.<span class="fn">time</span>() - start) * <span class="num">1000</span>)
+
+        <span class="cm"># Groundedness: keyword dalam jawaban</span>
+        <span class="var">score</span> = <span class="fn">sum</span>(<span class="num">1</span> <span class="kw">for</span> kw <span class="kw">in</span> tc.expected_keywords
                      <span class="kw">if</span> kw.lower() <span class="kw">in</span> answer.lower()) / <span class="fn">len</span>(tc.expected_keywords)
-        scores.append(score)
-        <span class="fn">print</span>(<span class="str">f"Q: {tc.question} | Score: {score:.0%}"</span>)
-    <span class="fn">print</span>(<span class="str">f"\nAverage: {sum(scores)/len(scores):.0%}"</span>)</pre>
+
+        <span class="cm"># Latency check</span>
+        <span class="var">latency_ok</span> = latency_ms &lt;= tc.max_latency_ms
+
+        scores.<span class="fn">append</span>(score)
+        <span class="fn">print</span>(<span class="str">f"Q: {tc.question}"</span>)
+        <span class="fn">print</span>(<span class="str">f"  Groundedness: {score:.0%} | Latency: {latency_ms}ms {'✓' if latency_ok else '✗ SLOW'}"</span>)
+
+    <span class="fn">print</span>(<span class="str">f"\nRata-rata groundedness: {sum(scores)/len(scores):.0%}"</span>)</pre>
+      </div>
+      <div class="concept-box orange" style="margin-top:12px">
+        <div class="concept-label">⚠️ Langfuse — Observability untuk Production</div>
+        <p>Untuk sistem yang sudah di-deploy, gunakan <strong>Langfuse</strong> (gratis, self-host atau cloud) untuk trace setiap request: latency per step, token usage, hallucination rate, dan cost. Ini yang dipakai team AI engineering profesional.</p>
       </div>
     </div>
   </div>
@@ -1328,11 +1472,11 @@ pip install mcp-server-playwright</pre>
     <div class="card">
       <div class="card-title">📅 Sprint 2 Minggu</div>
       <div class="step-list">
-        <div class="step"><div class="step-num">1</div><div class="step-content"><div class="step-title">Hari 1–2: OpenCode + Eksplorasi</div><div class="step-desc">Jalankan OpenCode, kasih task sederhana, observasi cara AI bekerja. Catat: kapan AI bagus, kapan AI halu.</div></div></div>
+        <div class="step"><div class="step-num">1</div><div class="step-content"><div class="step-title">Hari 1–2: OpenCode + Eksplorasi</div><div class="step-desc">Jalankan OpenCode, kasih task sederhana, observasi cara AI bekerja. Catat: kapan agent bekerja dengan baik, kapan agent gagal atau keluar jalur.</div></div></div>
         <div class="step"><div class="step-num">2</div><div class="step-content"><div class="step-title">Hari 3–4: RAG Dasar</div><div class="step-desc">Index 1-2 PDF. Buat script terminal yang bisa menjawab pertanyaan dari dokumen tersebut.</div></div></div>
         <div class="step"><div class="step-num">3</div><div class="step-content"><div class="step-title">Hari 5–7: FastAPI</div><div class="step-desc">Wrap RAG ke endpoint. Test via <code>/docs</code>. Tambahkan logging.</div></div></div>
         <div class="step"><div class="step-num">4</div><div class="step-content"><div class="step-title">Hari 8–10: Frontend</div><div class="step-desc">HTML + JS vanilla sederhana. Form input, kirim ke API, tampilkan jawaban.</div></div></div>
-        <div class="step"><div class="step-num">5</div><div class="step-content"><div class="step-title">Hari 11–14: Eval & Trust</div><div class="step-desc">Tulis 10+ test cases. Temukan di mana sistem gagal atau halu. Perbaiki chunk size, top-k, atau prompt.</div></div></div>
+        <div class="step"><div class="step-num">5</div><div class="step-content"><div class="step-title">Hari 11–14: Eval & Trust</div><div class="step-desc">Tulis 10+ test cases. Temukan di mana sistem gagal, keluar jalur, atau menghasilkan output yang tidak bisa dipercaya. Perbaiki chunk size, top-k, atau prompt.</div></div></div>
       </div>
     </div>
   </div>
@@ -1376,14 +1520,14 @@ pip install mcp-server-playwright</pre>
     </div>
     <div class="concept-box purple">
       <div class="concept-label">💬 Prinsip — Practical First</div>
-      <p>Kamu sudah pilih jalur yang benar: <strong>megang dulu, teori menyusul</strong>. Setelah kamu tahu rasanya AI halu, kamu akan jauh lebih menghargai kenapa trust model dan eval itu penting. Setelah kamu frustrasi dengan prompt yang buruk, kamu akan belajar prompt engineering jauh lebih cepat. Pengalaman adalah guru terbaik untuk AI engineering.</p>
+      <p>Kamu sudah pilih jalur yang benar: <strong>megang dulu, teori menyusul</strong>. Setelah kamu melihat langsung bagaimana agent bisa gagal, kamu akan jauh lebih menghargai kenapa trust model dan eval itu penting. Setelah kamu frustrasi dengan prompt yang buruk, kamu akan belajar prompt engineering jauh lebih cepat. Pengalaman adalah guru terbaik untuk AI engineering.</p>
     </div>
   </div>
 
   <!-- FOOTER -->
   <div class="footer">
-    <span>AI Engineer Stack v5 · Practical Edition · Arief</span>
-    <span>Revised 2026-06-01 · v4: OpenHands→OpenCode · v5: Hybrid DeepSeek+Ollama · v5b: Full stack update</span>
+    <span>AI Engineer Stack v6 · Practical Edition · Arief</span>
+    <span>Revised 2026-06-01 · v4: OpenHands→OpenCode · v5: Hybrid DeepSeek+Ollama · v6: Architect review — tool-agnostic, eval strengthened</span>
   </div>
 
 </main>
