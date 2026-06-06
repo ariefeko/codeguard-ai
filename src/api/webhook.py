@@ -20,7 +20,11 @@ async def sentry_webhook(request: Request):
     payload = await request.json()
 
     print("\n=== SENTRY WEBHOOK RECEIVED ===")
-    print(payload)
+    import json
+
+    print(
+        json.dumps( payload, indent=2, ensure_ascii=False )
+    )
 
     return {
         "status": "received"
