@@ -29,25 +29,37 @@ CodeGuard AI is an **autonomous engineering system** that runs in the background
 ## 🏗️ System Architecture
 
 ```
-Any codebase (any language, any framework)
-         ↓ (trigger: error / PR opened / cron)
-Sentry Webhook  ──┐
-GitHub Actions  ──┤──→ Backend App → Redis Queue (async, 202 instant return)
-Scheduled Job   ──┘                        ↓
-                              FastAPI Worker (Railway)
-                                           ↓
-                              Orchestration Layer
-                              ├── RAG (optional, Qdrant + nomic-embed-text)
-                              └── Prompt Engineering
-                                           ↓
-                              OpenRouter LLM Gateway
-                              ├── DeepSeek V3 (primary)
-                              ├── Gemini Flash (fallback #1)
-                              └── Groq / Llama (fallback #2)
-                                           ↓
-                              Output: PR Comment / GitHub Issue / Auto-fix commit
-                                           ↓
-                              ✅ Human reviews → approve / reject → merge
+Any Codebase (Any Language / Framework)
+   │
+   ├── (Trigger: Sentry Webhook / GitHub Actions PR / Scheduled Cron)
+   ▼
+Backend App (FastAPI Webhook Receiver)
+   │
+   ▼
+Redis Queue (Async processing; returns an instant 202 response)
+   │
+   ▼
+FastAPI Worker (Hosted on Railway)
+   │
+   ▼
+Orchestration Layer (Python 3.11 + LangChain)
+   ├── Retrieval-Augmented Generation (Optional: Qdrant + nomic-embed-text)
+   └── Prompt Engineering & Context Assembly
+   │
+   ▼
+OpenRouter LLM Gateway
+   ├── Primary: DeepSeek V3 (Free Tier)
+   ├── Fallback 1: Gemini Flash
+   └── Fallback 2: Groq / Llama
+   │
+   ▼
+Output Generation
+   ├── GitHub PR Comment
+   ├── GitHub Issue Creation
+   └── Auto-fix Commit (Awaiting manual gate)
+   │
+   ▼
+✅ Human Review Gate (Approve / Reject → Merge)
 ```
 
 ---
@@ -247,15 +259,22 @@ railway domain
 CodeGuard AI does not rely on a single provider. If one is down or rate-limited, the system automatically falls back:
 
 ```
-Incoming request
-     ↓
-DeepSeek V3 ──→ OK? → Use it
-     ↓ (failed / rate limited)
-Gemini Flash ──→ OK? → Use it
-     ↓ (failed)
-Groq / Llama ──→ OK? → Use it
-     ↓ (all failed)
-Return graceful error message
+Incoming Analysis Request
+         │
+         ▼
+[ Attempt: DeepSeek V3 ] ──(Success)──→ Complete & Send Output
+         │
+     (Failed / Rate Limited)
+         ▼
+[ Fallback 1: Gemini Flash ] ──(Success)──→ Complete & Send Output
+         │
+     (Failed)
+         ▼
+[ Fallback 2: Groq / Llama ] ──(Success)──→ Complete & Send Output
+         │
+     (All Failed)
+         ▼
+Return Graceful Error Message
 ```
 
 All providers are on free tier — zero cost for development and MVP.
