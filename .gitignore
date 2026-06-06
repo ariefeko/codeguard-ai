@@ -3,5 +3,13 @@
 venv/
 env/
 ENV/
+
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+*.pyc
+
+ai-results/
+
 Modelfile
 Thinkpad-T14.md
