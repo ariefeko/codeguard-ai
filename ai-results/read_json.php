@@ -1,5 +1,7 @@
 <?php
 
+// test generate AI file
+
 function readJsonFile(string $filePath): ?array
 {
     if (!file_exists($filePath)) {
