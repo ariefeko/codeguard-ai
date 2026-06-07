@@ -7,9 +7,12 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 # Fallback chain — kalau model pertama gagal, coba berikutnya
 MODEL_CHAIN = [
-    "deepseek/deepseek-chat-v3-0324:free",
-    "google/gemini-flash-1.5:free",
-    "meta-llama/llama-3.1-8b-instruct:free",
+    "deepseek/deepseek-v4-flash",       # 3.81T, primary, big quota
+    "google/gemini-3-flash-preview",     # 1.11T, cheap
+    "meta-llama/llama-4-maverick:free",  # 163B, free
+    "qwen/qwen3.6-plus",                 # 134B, $0.325/M — saving mode
+    "qwen/qwen3.7-max",                  # 201B, $1.25/M — last resort
+    "deepseek/deepseek-v4-pro",          # 1.74T, last fallback
 ]
 
 

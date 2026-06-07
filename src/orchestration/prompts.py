@@ -21,14 +21,14 @@ def build_code_review_prompt(context: dict) -> str:
     lines.append("=== CHANGED FILES ===")
     for path, content in context["changed_files"].items():
         lines.append(f"\n[{path}]")
-        lines.append(content)
+        lines.append(add_line_numbers(content))
 
     # Related files
     if context["related_files"]:
         lines.append("\n=== RELATED FILES (for context only, do not review) ===")
         for path, content in context["related_files"].items():
             lines.append(f"\n[{path}]")
-            lines.append(content)
+            lines.append(add_line_numbers(content))
 
     lines.append("\n=== INSTRUCTIONS ===")
     lines.append("- List issues found with severity: high / medium / low")
@@ -61,13 +61,13 @@ def build_bug_fix_prompt(context: dict, error: dict) -> str:
         lines.append("\n=== AFFECTED FILES ===")
         for path, content in context["changed_files"].items():
             lines.append(f"\n[{path}]")
-            lines.append(content)
+            lines.append(add_line_numbers(content))
 
     if context["related_files"]:
         lines.append("\n=== RELATED FILES (for context only) ===")
         for path, content in context["related_files"].items():
             lines.append(f"\n[{path}]")
-            lines.append(content)
+            lines.append(add_line_numbers(content))
 
     lines.append("\n=== INSTRUCTIONS ===")
     lines.append("- Identify the root cause of the error")
@@ -75,3 +75,11 @@ def build_bug_fix_prompt(context: dict, error: dict) -> str:
     lines.append("- Explain why this fix works")
 
     return "\n".join(lines)
+
+def add_line_numbers(content: str) -> str:
+    """Tambahkan nomor baris ke content file."""
+    lines = content.splitlines()
+    numbered = []
+    for i, line in enumerate(lines, start=1):
+        numbered.append(f"{i:4d} | {line}")
+    return "\n".join(numbered)
