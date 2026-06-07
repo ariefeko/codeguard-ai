@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Request
 import json
+from fastapi import APIRouter, Request
+from src.context.context_builder import ContextBuilder
 
 router = APIRouter()
 
@@ -9,19 +10,19 @@ async def github_webhook(request: Request):
     payload = await request.json()
     event_type = request.headers.get("X-GitHub-Event", "unknown")
 
-    print(f"\n=== GITHUB WEBHOOK: {event_type} ===")
-
     changed_files = extract_changed_files(event_type, payload)
 
-    print(f"Changed files ({len(changed_files)}):")
-    for f in changed_files:
-        print(f"  - {f}")
+    # Ambil repo info dari payload
+    owner = payload["repository"]["owner"]["login"]
+    repo = payload["repository"]["name"]
+    ref = payload["after"]  # commit SHA terbaru
 
-    return {
-        "status": "received",
-        "event": event_type,
-        "changed_files": changed_files,
-    }
+    # Context Builder jalan otomatis
+    cb = ContextBuilder(owner, repo, ref)
+    context = cb.build(changed_files)
+
+    print(context)
+    return {"status": "received"}
 
 
 def extract_changed_files(event_type: str, payload: dict) -> list[str]:
