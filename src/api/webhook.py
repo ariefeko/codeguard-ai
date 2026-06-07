@@ -1,31 +1,53 @@
 from fastapi import APIRouter, Request
+import json
 
 router = APIRouter()
 
-
 @router.post("/webhook/github")
 async def github_webhook(request: Request):
+    """Handle incoming GitHub webhook events."""
     payload = await request.json()
+    event_type = request.headers.get("X-GitHub-Event", "unknown")
 
-    print("\n=== GITHUB WEBHOOK RECEIVED ===")
-    print(payload)
+    print(f"\n=== GITHUB WEBHOOK: {event_type} ===")
+
+    changed_files = extract_changed_files(event_type, payload)
+
+    print(f"Changed files ({len(changed_files)}):")
+    for f in changed_files:
+        print(f"  - {f}")
 
     return {
-        "status": "received"
+        "status": "received",
+        "event": event_type,
+        "changed_files": changed_files,
     }
+
+
+def extract_changed_files(event_type: str, payload: dict) -> list[str]:
+    files = set()
+
+    if event_type == "push":
+        commits = payload.get("commits", [])
+        for commit in commits:
+            files.update(commit.get("added", []))
+            files.update(commit.get("modified", []))
+            # removed files tidak perlu dianalisis
+
+    elif event_type == "pull_request":
+        # PR payload tidak langsung kasih list file
+        # nanti butuh GitHub API call — placeholder dulu
+        pr_number = payload.get("number")
+        action = payload.get("action")
+        print(f"PR #{pr_number} action: {action}")
+
+    return list(files)
 
 
 @router.post("/webhook/sentry")
 async def sentry_webhook(request: Request):
+    """Handle incoming Sentry webhook events."""
     payload = await request.json()
-
     print("\n=== SENTRY WEBHOOK RECEIVED ===")
-    import json
-
-    print(
-        json.dumps( payload, indent=2, ensure_ascii=False )
-    )
-
-    return {
-        "status": "received"
-    }
+    print(json.dumps(payload, indent=2, ensure_ascii=False))
+    return {"status": "received"}
