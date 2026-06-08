@@ -25,23 +25,17 @@ class Orchestrator:
         }
 
     def review_code(self, context: dict) -> str:
-        """
-        Entry point untuk GitHub webhook — code review.
-        """
+        """ Entry point untuk GitHub webhook — code review. """
         prompt = build_code_review_prompt(context)
         return self._call_llm(prompt)
 
     def fix_bug(self, context: dict, error: dict) -> str:
-        """
-        Entry point untuk Sentry webhook — bug fix.
-        """
+        """ Entry point untuk Sentry webhook — bug fix. """
         prompt = build_bug_fix_prompt(context, error)
         return self._call_llm(prompt)
 
     def _call_llm(self, prompt: str) -> str:
-        """
-        Kirim prompt ke OpenRouter dengan fallback chain.
-        """
+        """ Kirim prompt ke OpenRouter dengan fallback chain. """
         for model in MODEL_CHAIN:
             print(f"[Orchestrator] Trying model: {model}")
             result = self._request(prompt, model)
@@ -67,9 +61,9 @@ class Orchestrator:
         try:
             response = httpx.post(
                 OPENROUTER_URL,
-                headers=self.headers,
-                json=payload,
-                timeout=60,
+                headers = self.headers,
+                json = payload,
+                timeout = 60,
             )
 
             if response.status_code == 200:
