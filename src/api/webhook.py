@@ -1,3 +1,4 @@
+import os
 import json
 from fastapi import APIRouter, Request
 from dotenv import load_dotenv
@@ -77,11 +78,28 @@ def extract_changed_files(event_type: str, payload: dict) -> list[str]:
         action = payload.get("action")
         pr_number = payload.get("number")
         print(f"PR #{pr_number} action: {action}")
-        # PR files diambil via GitHub API di ContextBuilder nanti
-        # Untuk sekarang ambil dari head commit
-        files_url = payload.get("pull_request", {}).get("url")
-        if files_url:
-            print(f"[webhook] PR URL: {files_url}")
+
+        # Hanya proses saat PR dibuka atau di-sync
+        if action not in ("opened", "synchronize"):
+            return []
+
+        # Fetch changed files via GitHub API
+        owner = payload["repository"]["owner"]["login"]
+        repo = payload["repository"]["name"]
+        token = os.getenv("GITHUB_PAT_TOKEN")
+
+        import httpx
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+        }
+        url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}/files"
+        response = httpx.get(url, headers=headers, timeout=10)
+
+        if response.status_code == 200:
+            for f in response.json():
+                if f.get("status") != "removed":
+                    files.add(f["filename"])
 
     return list(files)
 
@@ -91,7 +109,7 @@ def extract_branch(event_type: str, payload: dict) -> str | None:
         ref = payload.get("ref", "")
         # ref format: "refs/heads/develop"
         return ref.replace("refs/heads/", "") if ref else None
-    elif event_type == "pull_request":
+    if event_type == "pull_request":
         return payload.get("pull_request", {}).get("head", {}).get("ref")
     return None
 
