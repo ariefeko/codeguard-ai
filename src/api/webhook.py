@@ -33,7 +33,7 @@ async def github_webhook(request: Request):
 
     ref = payload.get("after") or payload.get("pull_request", {}).get("head", {}).get("sha")
     branch = extract_branch(event_type, payload)
-
+    # print(f"[webhook] Branch detected: {branch}")
     # Context Builder
     cb = ContextBuilder(owner, repo, ref)
     context = cb.build(changed_files)
@@ -51,6 +51,7 @@ async def github_webhook(request: Request):
     # Output → post ke GitHub
     github = GitHubClient(owner, repo)
     pr_number = github.get_open_pr_for_branch(branch) if branch else None
+    # print(f"[webhook] PR found: {pr_number}")
 
     if pr_number:
         # Ada PR → post sebagai PR comment
