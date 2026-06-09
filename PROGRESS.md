@@ -6,7 +6,7 @@
 
 ## Project Structure (Current)
 
-```
+```text
 codeguard-ai/
 ├── src/
 │   ├── agents/
@@ -44,15 +44,18 @@ codeguard-ai/
 ## Phase 1 — Foundation
 
 ### Python Environment
+
 - Python 3.12 + `.venv` initialized
 - `requirements.txt` configured
 - Git repository initialized
 
 ### Project Structure
+
 - `src/`, `tests/`, `docs/` directories created
 - `src/__init__.py` per module
 
 ### `src/config.py` — Single Source of Truth
+
 Centralized constants used across all modules:
 
 ```python
@@ -72,6 +75,7 @@ SKIP_FILES = { "__init__.py", "conftest.py" }
 ```
 
 Previously each module had its own duplicate constants (`IGNORE_DIRS`, `ANALYZABLE_EXTENSIONS`). Refactored to single import:
+
 ```python
 from src.config import SUPPORTED_EXTENSIONS, SKIP_DIRS
 ```
@@ -82,7 +86,7 @@ from src.config import SUPPORTED_EXTENSIONS, SKIP_DIRS
 
 ### `src/agents/sentry_agent.py`
 
-```
+```text
 SentryAgent(project_path)
   ├── collect_files()     → rglob project, filter by SUPPORTED_EXTENSIONS + SKIP_DIRS
   ├── read_file()         → read single file as string
@@ -115,7 +119,7 @@ Key lesson: `load_dotenv()` must be at the top of `main.py` — not in `webhook.
 
 ### `src/api/webhook.py` — Webhook Handlers
 
-```
+```text
 POST /webhook/github  → handle push + pull_request events
 POST /webhook/sentry  → receive Sentry error payload (print only, not yet processed)
 ```
@@ -155,7 +159,8 @@ tmux attach -t codeguard
 ### GitHub Webhook Connected
 
 Configured on repo **Tagihin** (demo app — TALL stack Laravel):
-```
+
+```text
 Payload URL : https://xxxx.ngrok-free.app/webhook/github
 Content type: application/json
 Events      : Pushes + Pull requests
@@ -164,6 +169,7 @@ Events      : Pushes + Pull requests
 ### `extract_changed_files()` — Parse Push + PR Payload
 
 **Push event** — files extracted from commit payload:
+
 ```python
 commits = payload.get("commits", [])
 for commit in commits:
@@ -172,6 +178,7 @@ for commit in commits:
 ```
 
 **Pull request event** — files fetched via GitHub API (not in payload directly):
+
 ```python
 url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}/files"
 for f in response.json():
@@ -185,7 +192,7 @@ for f in response.json():
 # Push event
 ref = payload.get("ref", "")  # "refs/heads/develop"
 branch = ref.replace("refs/heads/", "")
-
+ 
 # Pull request event
 branch = payload["pull_request"]["head"]["ref"]
 ```
@@ -196,7 +203,7 @@ branch = payload["pull_request"]["head"]["ref"]
 
 ### `src/context/context_builder.py`
 
-```
+```text
 ContextBuilder(owner, repo, ref)
   ├── build(changed_files)       → entry point, returns context dict
   ├── _filter(files)             → remove non-code files (.md, .blade.php, etc.)
@@ -210,6 +217,7 @@ ContextBuilder(owner, repo, ref)
 ```
 
 **Output format:**
+
 ```python
 {
     "changed_files": {
@@ -222,7 +230,8 @@ ContextBuilder(owner, repo, ref)
 ```
 
 **Import patterns supported (regex per language):**
-```
+
+```text
 PHP    → use App\Services\InvoiceService;
 Python → from services.invoice import InvoiceService
 JS/TS  → import { X } from './services/invoice'
@@ -233,7 +242,8 @@ Razor  → @using MyApp.Services / @inject
 ```
 
 **GitHub API used:**
-```
+
+```text
 GET /repos/{owner}/{repo}/contents/{path}?ref={sha}  → fetch file content (base64)
 GET /repos/{owner}/{repo}/git/trees/{ref}?recursive=1 → fetch full repo tree (cached)
 ```
@@ -254,6 +264,7 @@ build_bug_fix_prompt(context, error)  # Sentry webhook → bug fix (not yet used
 ```
 
 **Line numbers added to file content:**
+
 ```python
 def add_line_numbers(content: str) -> str:
     lines = content.splitlines()
@@ -264,7 +275,7 @@ Without line numbers, LLM guesses positions inaccurately. Adding them ensures LL
 
 ### `src/orchestration/orchestrator.py`
 
-```
+```text
 Orchestrator
   ├── review_code(context)   → build prompt → _call_llm()
   ├── fix_bug(context, error) → build prompt → _call_llm() (not yet wired)
@@ -273,6 +284,7 @@ Orchestrator
 ```
 
 **Fallback chain:**
+
 ```python
 MODEL_CHAIN = [
     "deepseek/deepseek-v4-flash",
@@ -291,7 +303,7 @@ All models accessed via **OpenRouter** — single API key, automatic fallback if
 
 ### `src/github/github_client.py`
 
-```
+```text
 GitHubClient(owner, repo)
   ├── get_open_pr_for_branch(branch)  → GET /pulls?state=open&head={owner}:{branch}
   ├── post_pr_comment(pr_number, body) → POST /issues/{pr}/comments
@@ -299,7 +311,8 @@ GitHubClient(owner, repo)
 ```
 
 **PAT token permissions required:**
-```
+
+```text
 Contents      → Read-only   (fetch files)
 Pull requests → Read and write  (post PR comment)
 Issues        → Read and write  (create issue)
@@ -322,7 +335,7 @@ def format_pr_comment(review_result: str) -> str:
 
 ## Phase 8 — End-to-End Flow (Confirmed Working)
 
-```
+```text
 git push / open PR (Tagihin repo)
   → GitHub sends POST to /webhook/github
     → extract_changed_files()
@@ -352,7 +365,8 @@ git push / open PR (Tagihin repo)
 Zero setup on the target repo. Two steps only:
 
 **Step 1 — Add GitHub webhook on target repo:**
-```
+
+```text
 Settings → Webhooks → Add webhook
 Payload URL : https://your-codeguard-url/webhook/github
 Content type: application/json
@@ -360,7 +374,8 @@ Events      : Pushes + Pull requests
 ```
 
 **Step 2 — Grant PAT token access:**
-```
+
+```text
 GitHub → Settings → Developer settings →
 Personal access tokens → Fine-grained tokens →
 codeguard-ai token → Edit →
@@ -370,18 +385,6 @@ Permissions: Contents (read), Pull requests (write), Issues (write)
 ```
 
 CodeGuard AI reads all files via GitHub API — no cloning, no local access required.
-
----
-
-## Next Steps
-
-```
-⬜ Sentry webhook — extract error context + wire to fix_bug()
-⬜ Redis queue bridge — async processing
-⬜ pytest + mock LLM — test suite without real API calls
-⬜ Railway deploy — production hosting
-⬜ RAG pipeline — LangChain + Qdrant + nomic-embed-text (optional)
-```
 
 ---
 
@@ -411,3 +414,101 @@ ngrok http 8000
 # Recommended: run both in tmux
 tmux new -s codeguard
 ```
+
+---
+
+## Next Steps
+
+### Roadmap (in order)
+
+```text
+⬜ Phase 9  — Railway Deploy
+             Production hosting, public URL, no more ngrok
+ 
+⬜ Phase 10 — Redis Queue Bridge
+             Async processing, instant 202 response, worker pattern
+ 
+⬜ Phase 11 — Sentry Webhook Integration
+             Extract error context → wire to fix_bug()
+             Output: GitHub Issue + Auto Fix PR (human-in-the-loop)
+ 
+⬜ Phase 12 — Tavily Web Search Integration
+             Real-time security advisories + best practices
+             LLM findings backed by external sources
+ 
+⬜ Phase 13 — pytest + Mock LLM
+             Test suite without real API calls, no billing
+ 
+⬜ Phase 14 — RAG Pipeline (Phase 2)
+             LangChain + Qdrant + nomic-embed-text
+             Internal knowledge base + organization coding standards
+```
+
+---
+
+### Future Architecture (with Tavily + RAG)
+
+```text
+GitHub PR / Sentry Error
+    ↓
+FastAPI Webhook
+    ↓
+Redis Queue
+    ↓
+Worker
+    ↓
+Context Builder
+    ↓
+Orchestration
+    ├── Local Context (changed files + related files)
+    ├── Tavily Search (CVE, security advisories, best practices)
+    └── RAG Knowledge Base (Phase 2 — LangChain + Qdrant)
+    ↓
+OpenRouter → LLM Fallback Chain
+    ↓
+Output
+    ├── PR Comment (GitHub webhook)
+    └── GitHub Issue + Auto Fix PR (Sentry webhook)
+    ↓
+Human Review Gate (approve / reject / modify)
+```
+
+---
+
+### Why Tavily Before RAG?
+
+Currently CodeGuard AI can only analyze:
+
+```text
+- Source code
+- Changed files
+- Related files
+- Dependency relationships
+```
+
+With Tavily, CodeGuard AI can additionally search:
+
+```text
+- CVE databases
+- Package vulnerabilities (Composer, npm, pip)
+- Framework security advisories (Laravel, Symfony, Drupal)
+- OWASP recommendations
+- Latest best practices per language/framework
+```
+
+**Example:**
+
+```text
+Detected: symfony/http-foundation 6.4.x
+ 
+Tavily searches:
+  "symfony http-foundation 6.4 vulnerability"
+  "symfony security advisory 2025"
+ 
+Result: PR comment includes real CVE references,
+not just LLM training data (which may be outdated)
+```
+
+RAG requires significantly more setup (embedding pipeline, vector DB, chunking strategy, retrieval tuning) — Tavily delivers immediate value in one API call.
+
+---
