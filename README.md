@@ -9,7 +9,7 @@
 
 ---
 
-## 🔍 What is CodeGuard AI?
+## What is CodeGuard AI?
 
 CodeGuard AI is an **autonomous engineering system** that runs in the background — monitoring your codebase, detecting issues, and proposing fixes automatically. Not just a linter, but an agent that reasons.
 
@@ -17,16 +17,56 @@ CodeGuard AI is an **autonomous engineering system** that runs in the background
 
 | Capability | Description |
 |---|---|
-| 🐛 **Bug Detection** | Sentry error received → AI analyzes root cause + stack trace |
-| 👁️ **PR Review** | GitHub PR opened → AI reviews diff, flags issues, suggests improvements |
-| 🔒 **Security Scan** | Detects SQL injection, exposed secrets, insecure patterns |
-| 📈 **Code Quality** | Best practice checks, scalability warnings, refactor suggestions |
+| **Bug Detection** | Sentry error received → AI analyzes root cause + stack trace |
+| **PR Review** | GitHub PR opened → AI reviews diff, flags issues, suggests improvements |
+| **Security Scan** | Detects SQL injection, exposed secrets, insecure patterns |
+| **Code Quality** | Best practice checks, scalability warnings, refactor suggestions |
 
 **Human-in-the-loop:** AI proposes via PR comment or GitHub Issue — humans approve/merge. No automatic changes without review.
 
 ---
 
-## 🏗️ System Architecture
+## Connect CodeGuard AI to Any Repo
+
+CodeGuard AI requires **zero setup on the target repo** — no SDK, no config file, no dependency install. Just two steps:
+
+### Step 1 — Add GitHub Webhook
+
+Go to your target repo on GitHub:
+
+```
+Settings → Webhooks → Add webhook
+
+Payload URL : https://your-codeguard-url/webhook/github
+Content type: application/json
+Secret      : (optional, for signature verification)
+Events      : ✅ Pushes
+              ✅ Pull requests
+Active      : ✅
+```
+
+### Step 2 — Grant PAT Token Access
+
+```
+GitHub → Settings → Developer settings →
+Personal access tokens → Fine-grained tokens →
+codeguard-ai token → Edit →
+Repository access → add your target repo
+
+Permissions required:
+  ✅ Contents      → Read-only
+  ✅ Pull requests → Read and write
+  ✅ Issues        → Read and write
+  ✅ Metadata      → Read-only (auto)
+```
+
+That's it. CodeGuard AI reads all files via GitHub API — no cloning, no local access required.
+
+> **Supports any language:** PHP, Python, JavaScript, TypeScript, Java, Go, C#, Razor, and more.
+
+---
+
+## System Architecture
 
 ```
 Any Codebase (Any Language / Framework)
@@ -64,9 +104,9 @@ Output Generation
 
 ---
 
-## 🚀 Core Features
+## Core Features
 
-### 🐛 Sentry Bug Agent
+### Sentry Bug Agent
 Production error received by Sentry → webhook trigger → AI analyzes within seconds → GitHub Issue created automatically with:
 - Root cause analysis
 - Files likely involved
@@ -74,7 +114,7 @@ Production error received by Sentry → webhook trigger → AI analyzes within s
 - Quick fix for immediate production relief
 - Prevention strategy going forward
 
-### 👁️ PR Auto-Review Agent
+### PR Auto-Review Agent
 PR opened on GitHub → GitHub Actions trigger → AI reviews diff → comments directly on PR with:
 - Bug detection per line
 - Security vulnerability check
@@ -82,14 +122,14 @@ PR opened on GitHub → GitHub Actions trigger → AI reviews diff → comments 
 - Performance concerns
 - Improvement suggestions
 
-### 🔒 Security Scanner
+### Security Scanner
 - SQL Injection pattern detection
 - Exposed API keys / secrets
 - Insecure direct object reference
 - Missing authentication checks
 - Dependency vulnerability hints
 
-### 📈 Code Quality Analyzer
+### Code Quality Analyzer
 - SOLID principle violations
 - N+1 query detection
 - Scalability bottlenecks
@@ -98,7 +138,7 @@ PR opened on GitHub → GitHub Actions trigger → AI reviews diff → comments 
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 ```
 Layer               Technology
@@ -124,39 +164,47 @@ Testing             pytest + mock LLM
 ```
 codeguard-ai/
 ├── src/
-│   ├── sentry_agent.py      # Sentry webhook receiver + bug analysis
-│   ├── pr_reviewer.py       # PR diff analyzer + GitHub commenter
-│   ├── security_scanner.py  # Security pattern detection
-│   ├── orchestrator.py      # Main LangChain orchestration
+│   ├── agents/
+│   │   └── sentry_agent.py        # File scanner engine
+│   ├── api/
+│   │   ├── main.py                # FastAPI app entry point
+│   │   └── webhook.py             # Webhook route handlers
+│   ├── context/
+│   │   └── context_builder.py     # GitHub API file fetcher + dependency resolver
+│   ├── github/
+│   │   └── github_client.py       # GitHub API wrapper (PR comment, Issue)
+│   ├── orchestration/
+│   │   ├── orchestrator.py        # LLM orchestration + fallback chain
+│   │   └── prompts.py             # Prompt templates per analysis type
 │   ├── rag/
-│   │   ├── indexer.py       # Codebase indexing for RAG
-│   │   └── retriever.py     # Context retrieval
-│   └── utils/
-│       ├── llm_client.py    # OpenRouter + fallback chain
-│       └── github_client.py # GitHub API wrapper
+│   │   └── __init__.py            # Placeholder — RAG pipeline (not yet implemented)
+│   ├── utils/
+│   │   └── __init__.py            # Placeholder
+│   └── config.py                  # Single source of truth: extensions, skip dirs
 ├── tests/
-│   ├── conftest.py          # Mock LLM fixtures
-│   ├── test_sentry_agent.py
-│   └── test_pr_reviewer.py
-├── docs/
-│   ├── architecture.md
-│   └── deployment.md
+│   ├── conftest.py
+│   └── __init__.py
+├── .env                           # API keys (not committed)
 ├── .env.example
+├── .gitignore
+├── .pylintrc
+├── docker-compose.yml
+├── Procfile                       # Railway deploy config
 ├── requirements.txt
-├── Procfile                 # Railway deploy config
 └── README.md
 ```
 
 ---
 
-## ⚡ Quick Start
+## Quick Start
 
 ### Prerequisites
 - Python 3.11+
-- Redis (local or Railway)
+<!-- - Redis (local or Railway) -->
 - OpenRouter API key (free tier)
 - GitHub Personal Access Token
-- Sentry account (free tier)
+<!-- - Sentry account (free tier) -->
+- Railway account (free tier) ← used for deploy
 
 ### Setup
 
@@ -180,43 +228,34 @@ cp .env.example .env
 
 ```bash
 # LLM Providers (fallback chain)
-DEEPSEEK_API_KEY=sk-xxxx        # platform.deepseek.com (free tier)
-OPENROUTER_API_KEY=sk-or-xxxx   # openrouter.ai (free tier)
-GROQ_API_KEY=gsk_xxxx           # console.groq.com (free tier)
-
-# GitHub
-GITHUB_TOKEN=ghp_xxxx
-GITHUB_REPO=username/your-repo
-
-# Sentry
-SENTRY_WEBHOOK_SECRET=xxxx
-
-# App
-APP_ENV=local                   # local | staging | production
-LOG_LEVEL=DEBUG
+GITHUB_PAT_TOKEN = your-github-pat-token-here
+OPENROUTER_API_KEY = your-openrouter-api-key-here
 ```
 
 ### Run Locally
 
 ```bash
-# Start FastAPI server
-uvicorn src.sentry_agent:app --reload --port 8000
+source .venv/bin/activate
 
-# Test health check
-curl http://localhost:8000/
-# → {"status": "ok", "deepseek_key_set": true, ...}
+# Create new Session
+tmux new -s codeguard
 
-# Send a test Sentry payload
-curl -X POST http://localhost:8000/webhook/sentry \
-  -H "Content-Type: application/json" \
-  -d '{
-    "exception": {"type": "QueryException", "value": "SQLSTATE timeout"},
-    "stacktrace": "#0 app/Models/User.php(42)",
-    "request": {"url": "https://yourapp.com/api/users"}
-  }'
+# Left panel: FastAPI
+uvicorn src.api.main:app --reload --port 8000
+
+# Create 2 panel inside tmux — Ctrl+B + %
+
+# Right panel: ngrok (Ctrl+B + arrow left or right)
+ngrok http 8000
+
+# Detach
+Ctrl+B lalu D
+
+# open tmux session again:
+tmux attach -t codeguard
 ```
 
-### Run Tests
+<!-- ### Run Tests
 
 ```bash
 # Run all tests (no real API calls — LLM is mocked)
@@ -224,37 +263,11 @@ pytest -v
 
 # Run with coverage report
 pytest --cov=src --cov-report=term-missing
-```
+``` -->
 
 ---
 
-## 🚂 Deploy to Railway
-
-```bash
-# Install Railway CLI
-npm install -g @railway/cli
-
-# Login and initialize
-railway login
-railway init
-
-# Set environment variables
-railway variables set DEEPSEEK_API_KEY=sk-xxxx
-railway variables set GITHUB_TOKEN=ghp_xxxx
-railway variables set SENTRY_WEBHOOK_SECRET=xxxx
-railway variables set APP_ENV=production
-
-# Deploy
-railway up
-
-# Get your public URL
-railway domain
-# → https://codeguard-ai-production.up.railway.app
-```
-
----
-
-## 🔄 LLM Fallback Chain
+## LLM Fallback Chain
 
 CodeGuard AI does not rely on a single provider. If one is down or rate-limited, the system automatically falls back:
 
@@ -281,7 +294,7 @@ All providers are on free tier — zero cost for development and MVP.
 
 ---
 
-## 🧪 Testing Strategy
+## Testing Strategy
 
 All tests are mocked — no real API calls, no billing:
 
@@ -334,7 +347,7 @@ pytest coverage:
 
 --- -->
 
-## 💡 Why CodeGuard AI?
+## Why CodeGuard AI?
 
 Most AI coding tools are **reactive** — they wait for you to ask. CodeGuard AI is **proactive** — it watches your codebase and acts autonomously, like a tireless staff engineer running in the background.
 
@@ -354,20 +367,17 @@ CodeGuard AI is not a replacement for those tools — it is proof that any devel
 
 ---
 
-## 👨‍💻 Author
+## Author
 
-**Arief Eko** — Senior Backend Engineer (Fullstack Capable)
+**Arief Eko** — Backend Engineer · PHP · Node.js · Python · LLM Integration
 
-- 9+ years production experience: Laravel, Node.js, Python
-- Clients: BRI (digital banking), Nestlé (enterprise)
-- Building AI-powered systems for real-world engineering problems
-
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-ariefeko-blue?style=flat-square)](https://www.linkedin.com/in/arief-eko-wicaksono-4175a12a)
 [![GitHub](https://img.shields.io/badge/GitHub-ariefeko-black?style=flat-square&logo=github)](https://github.com/ariefeko)
-[![Portfolio](https://img.shields.io/badge/Portfolio-ariefeko.github.io-blue?style=flat-square)](https://ariefeko.github.io)
+[![Portfolio](https://img.shields.io/badge/Portfolio-ariefeko.github.io-orange?style=flat-square)](https://ariefeko.github.io)
 
 ---
 
-## 📄 License
+## License
 
 MIT — free to use, fork, and learn from.
 
