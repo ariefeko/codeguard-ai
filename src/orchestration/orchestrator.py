@@ -1,6 +1,7 @@
 import os
 import httpx
 from src.orchestration.prompts import build_code_review_prompt, build_bug_fix_prompt
+from src.orchestration.tavily_client import CodeGuardSearch
 
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -23,19 +24,72 @@ class Orchestrator:
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
+        self.search = CodeGuardSearch()
 
     def review_code(self, context: dict) -> str:
-        """ Entry point untuk GitHub webhook — code review. """
-        prompt = build_code_review_prompt(context)
+        """Entry point untuk GitHub webhook — code review."""
+        # Tavily: cari info terbaru sebelum review
+        search_results = self._enrich_with_search(context)
+
+        prompt = build_code_review_prompt(context, search_results)
         return self._call_llm(prompt)
 
     def fix_bug(self, context: dict, error: dict) -> str:
-        """ Entry point untuk Sentry webhook — bug fix. """
-        prompt = build_bug_fix_prompt(context, error)
+        """Entry point untuk Sentry webhook — bug fix."""
+        # Tavily: cari info terkait error
+        search_results = self._search_for_error(error)
+
+        prompt = build_bug_fix_prompt(context, error, search_results)
         return self._call_llm(prompt)
 
+    def _enrich_with_search(self, context: dict) -> dict:
+        """
+        Jalankan Tavily search berdasarkan content dari changed files.
+        Return dict berisi hasil search yang relevan.
+        """
+        results = {}
+
+        # Deteksi bahasa/framework dari file extension
+        for file_path in context.get("changed_files", {}).keys():
+            if file_path.endswith(".php"):
+                results["php_security"] = self.search.search_best_practices(
+                    "PHP Laravel", "security best practices"
+                )
+                results["owasp_injection"] = self.search.search_owasp("SQL injection")
+                break
+            elif file_path.endswith(".py"):
+                results["python_security"] = self.search.search_best_practices(
+                    "Python FastAPI", "security best practices"
+                )
+                break
+            elif file_path.endswith((".js", ".ts")):
+                results["js_security"] = self.search.search_best_practices(
+                    "Node.js JavaScript", "security best practices"
+                )
+                break
+
+        # Selalu search OWASP top 10 terbaru
+        results["owasp_top10"] = self.search.search_owasp("Top 10 2025")
+
+        # Filter None values
+        return {k: v for k, v in results.items() if v}
+
+    def _search_for_error(self, error: dict) -> dict:
+        """
+        Tavily search untuk Sentry error context.
+        """
+        results = {}
+
+        error_type = error.get("type", "")
+        if error_type:
+            results["error_info"] = self.search._search(
+                f"{error_type} fix solution best practice"
+            )
+
+        return {k: v for k, v in results.items() if v}
+
     def _call_llm(self, prompt: str) -> str:
-        """ Kirim prompt ke OpenRouter dengan fallback chain. """
+        """Kirim prompt ke OpenRouter dengan fallback chain."""
         for model in MODEL_CHAIN:
             print(f"[Orchestrator] Trying model: {model}")
             result = self._request(prompt, model)
@@ -61,9 +115,9 @@ class Orchestrator:
         try:
             response = httpx.post(
                 OPENROUTER_URL,
-                headers = self.headers,
-                json = payload,
-                timeout = 60,
+                headers=self.headers,
+                json=payload,
+                timeout=60,
             )
 
             if response.status_code == 200:

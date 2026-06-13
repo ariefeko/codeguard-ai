@@ -1,16 +1,21 @@
 # src/orchestration/prompts.py
 
-def build_code_review_prompt(context: dict) -> str:
+def build_code_review_prompt(context: dict, search_results: dict = None) -> str:
     """
     Susun prompt code review dari context dict.
     context = {
         "changed_files": {"path": "content"},
         "related_files": {"path": "content"},
     }
+    search_results = {
+        "php_security": "...",
+        "owasp_top10": "...",
+        ...
+    }
     """
     lines = []
 
-    lines.append("You are an expert code reviewer.")
+    lines.append("You are an expert code reviewer with up-to-date knowledge of security advisories and best practices.")
     lines.append(
         "Review the following changed files and identify bugs, "
         "security issues, and code quality problems."
@@ -30,9 +35,19 @@ def build_code_review_prompt(context: dict) -> str:
             lines.append(f"\n[{path}]")
             lines.append(add_line_numbers(content))
 
+    # Tavily search results
+    if search_results:
+        lines.append("\n=== LATEST SECURITY & BEST PRACTICE REFERENCES ===")
+        lines.append("Use the following up-to-date information to enrich your review:")
+        for key, value in search_results.items():
+            label = key.replace("_", " ").upper()
+            lines.append(f"\n[{label}]")
+            lines.append(value)
+
     lines.append("\n=== INSTRUCTIONS ===")
     lines.append("- List issues found with severity: high / medium / low")
     lines.append("- For each issue: explain the problem and suggest a fix")
+    lines.append("- Reference security advisories or best practices where relevant")
     lines.append("- If no issues found, say 'No issues found'")
     lines.append("- End with overall code quality score: 1-10")
     lines.append("- Be concise and specific")
@@ -40,7 +55,7 @@ def build_code_review_prompt(context: dict) -> str:
     return "\n".join(lines)
 
 
-def build_bug_fix_prompt(context: dict, error: dict) -> str:
+def build_bug_fix_prompt(context: dict, error: dict, search_results: dict = None) -> str:
     """
     Prompt untuk Sentry error — bug fix.
     Dipakai nanti saat Sentry webhook diintegrasikan.
@@ -69,12 +84,23 @@ def build_bug_fix_prompt(context: dict, error: dict) -> str:
             lines.append(f"\n[{path}]")
             lines.append(add_line_numbers(content))
 
+    # Tavily search results
+    if search_results:
+        lines.append("\n=== LATEST REFERENCES ===")
+        lines.append("Use the following information to enrich your fix suggestion:")
+        for key, value in search_results.items():
+            label = key.replace("_", " ").upper()
+            lines.append(f"\n[{label}]")
+            lines.append(value)
+
     lines.append("\n=== INSTRUCTIONS ===")
     lines.append("- Identify the root cause of the error")
     lines.append("- Provide the fix as a code snippet")
     lines.append("- Explain why this fix works")
+    lines.append("- Reference any relevant security advisories if applicable")
 
     return "\n".join(lines)
+
 
 def add_line_numbers(content: str) -> str:
     """Tambahkan nomor baris ke content file."""
