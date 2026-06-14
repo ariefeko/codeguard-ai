@@ -8,6 +8,12 @@ SUPPORTED_EXTENSIONS = {
     ".cs",
     ".razor",
     ".cshtml",
+    ".twig",
+    ".cpp",
+    ".cc",
+    ".cxx",
+    ".h",
+    ".hpp",
 }
 
 SKIP_EXTENSIONS = {
