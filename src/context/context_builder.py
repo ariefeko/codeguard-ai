@@ -1,9 +1,9 @@
 from pathlib import Path
-from src.config import SUPPORTED_EXTENSIONS, SKIP_DIRS
 import re
 import base64
 import os
 import httpx
+from src.config import SUPPORTED_EXTENSIONS, SKIP_DIRS
 
 # Regex import per bahasa
 IMPORT_PATTERNS = {
