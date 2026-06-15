@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from src.context.context_builder import ContextBuilder
 from src.orchestration.orchestrator import Orchestrator
 from src.github.github_client import GitHubClient
-from src.api.webhook import format_pr_comment
+from src.utils.formatters import format_pr_comment
 
 load_dotenv()
 
