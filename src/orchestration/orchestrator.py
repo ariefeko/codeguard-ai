@@ -1,55 +1,61 @@
 import os
+import json
 import httpx
 from src.orchestration.prompts import build_code_review_prompt, build_bug_fix_prompt
 from src.orchestration.tavily_client import CodeGuardSearch
 
 
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+# Provider endpoints
+OPENAGENTIC_URL = "https://openagentic.id/api/v1/chat/completions"
+GROQ_URL        = "https://api.groq.com/openai/v1/chat/completions"
+GEMINI_URL      = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+DEEPSEEK_URL    = "https://api.deepseek.com/v1/chat/completions"
 
-# Fallback chain — kalau model pertama gagal, coba berikutnya
-MODEL_CHAIN = [
-    "deepseek/deepseek-v4-flash",       # 3.81T, primary, big quota
-    "google/gemini-3-flash-preview",     # 1.11T, cheap
-    "meta-llama/llama-4-maverick:free",  # 163B, free
-    "qwen/qwen3.6-plus",                 # 134B, $0.325/M — saving mode
-    "qwen/qwen3.7-max",                  # 201B, $1.25/M — last resort
-    "deepseek/deepseek-v4-pro",          # 1.74T, last fallback
+# Fallback chain — semua free tier
+PROVIDER_CHAIN = [
+    {
+        "name"   : "DeepSeek V4 Flash (OpenAgentic)",
+        "url"    : OPENAGENTIC_URL,
+        "model"  : "deepseek-v4-flash",
+        "api_key": "OPENAGENTIC_API_KEY",
+    },
+    {
+        "name"   : "GLM-5 (OpenAgentic)",
+        "url"    : OPENAGENTIC_URL,
+        "model"  : "glm-5",
+        "api_key": "OPENAGENTIC_API_KEY",
+    },
+    {
+        "name"   : "Llama 3.3 70B (Groq)",
+        "url"    : GROQ_URL,
+        "model"  : "llama-3.3-70b-versatile",
+        "api_key": "GROQ_API_KEY",
+    },
 ]
+
+MAX_TOKENS = 2048
 
 
 class Orchestrator:
     def __init__(self):
-        self.api_key = os.getenv("OPENROUTER_API_KEY")
-        self.headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
         self.search = CodeGuardSearch()
 
     def review_code(self, context: dict) -> str:
         """Entry point untuk GitHub webhook — code review."""
-        # Tavily: cari info terbaru sebelum review
         search_results = self._enrich_with_search(context)
-
         prompt = build_code_review_prompt(context, search_results)
         return self._call_llm(prompt)
 
     def fix_bug(self, context: dict, error: dict) -> str:
         """Entry point untuk Sentry webhook — bug fix."""
-        # Tavily: cari info terkait error
         search_results = self._search_for_error(error)
-
         prompt = build_bug_fix_prompt(context, error, search_results)
         return self._call_llm(prompt)
 
     def _enrich_with_search(self, context: dict) -> dict:
-        """
-        Jalankan Tavily search berdasarkan content dari changed files.
-        Return dict berisi hasil search yang relevan.
-        """
+        """Tavily search berdasarkan file extension."""
         results = {}
 
-        # Deteksi bahasa/framework dari file extension
         for file_path in context.get("changed_files", {}).keys():
             if file_path.endswith(".php"):
                 results["php_security"] = self.search.search_best_practices(
@@ -68,61 +74,71 @@ class Orchestrator:
                 )
                 break
 
-        # Selalu search OWASP top 10 terbaru
         results["owasp_top10"] = self.search.search_owasp("Top 10 2025")
 
-        # Filter None values
         return {k: v for k, v in results.items() if v}
 
     def _search_for_error(self, error: dict) -> dict:
-        """
-        Tavily search untuk Sentry error context.
-        """
+        """Tavily search untuk Sentry error context."""
         results = {}
-
         error_type = error.get("type", "")
         if error_type:
             results["error_info"] = self.search._search(
                 f"{error_type} fix solution best practice"
             )
-
         return {k: v for k, v in results.items() if v}
 
     def _call_llm(self, prompt: str) -> str:
-        """Kirim prompt ke OpenRouter dengan fallback chain."""
-        for model in MODEL_CHAIN:
-            print(f"[Orchestrator] Trying model: {model}")
-            result = self._request(prompt, model)
+        """Kirim prompt ke provider dengan fallback chain."""
+        for provider in PROVIDER_CHAIN:
+            print(f"[Orchestrator] Trying: {provider['name']}")
+            result = self._request(prompt, provider)
             if result:
-                print(f"[Orchestrator] Success with model: {model}")
+                print(f"[Orchestrator] Success: {provider['name']}")
                 return result
-            print(f"[Orchestrator] Failed with model: {model}, trying next...")
+            print(f"[Orchestrator] Failed: {provider['name']}, trying next...")
 
-        return "Error: all models failed."
+        return "Error: all providers failed."
 
-    def _request(self, prompt: str, model: str) -> str | None:
-        """
-        Satu request ke OpenRouter.
-        Return None kalau gagal — trigger fallback.
-        """
+    def _request(self, prompt: str, provider: dict) -> str | None:
+        """Satu request ke provider. Return None kalau gagal."""
+        api_key = os.getenv(provider["api_key"])
+        if not api_key:
+            print(f"[Orchestrator] Missing API key: {provider['api_key']}")
+            return None
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+
         payload = {
-            "model": model,
-            "messages": [
+            "model"     : provider["model"],
+            "max_tokens": MAX_TOKENS,
+            "messages"  : [
                 {"role": "user", "content": prompt}
             ],
         }
 
         try:
             response = httpx.post(
-                OPENROUTER_URL,
-                headers=self.headers,
+                provider["url"],
+                headers=headers,
                 json=payload,
                 timeout=60,
             )
 
             if response.status_code == 200:
-                data = response.json()
-                return data["choices"][0]["message"]["content"]
+                try:
+                    text = response.text.strip()
+                    if text.endswith("data: [DONE]"):
+                        text = text[:-len("data: [DONE]")].strip()
+                    data = json.loads(text)
+                    return data["choices"][0]["message"]["content"]
+                except Exception as e:
+                    print(f"[Orchestrator] JSON parse error: {e}")
+                    print(f"[Orchestrator] Raw response (500 chars): {response.text[:500]}")
+                    return None
             else:
                 print(f"[Orchestrator] HTTP {response.status_code}: {response.text[:200]}")
                 return None
