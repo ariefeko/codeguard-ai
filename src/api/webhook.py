@@ -5,6 +5,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from src.worker.worker import get_queue
+from src.worker.worker import get_queue, process_github_review
 
 load_dotenv()
 
@@ -37,9 +38,9 @@ async def github_webhook(request: Request):
     # Push job ke Redis Queue → instant response
     queue = get_queue()
     job = queue.enqueue(
-        "src.worker.worker.process_github_review",
+        process_github_review,  # ← langsung function, bukan string
         owner, repo, ref, branch, changed_files,
-        job_timeout = 120,
+        job_timeout=120,
     )
 
     print(f"[webhook] Job enqueued: {job.id}")
