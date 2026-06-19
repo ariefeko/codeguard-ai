@@ -3,6 +3,7 @@ import json
 import httpx
 from src.orchestration.prompts import build_code_review_prompt, build_bug_fix_prompt
 from src.orchestration.tavily_client import CodeGuardSearch
+from src.orchestration.schemas import validate_llm_output, BugAnalysis
 
 
 # Provider endpoints
@@ -35,6 +36,11 @@ PROVIDER_CHAIN = [
 
 MAX_TOKENS = 2048
 
+# Path Sentry (fix_bug) butuh lebih banyak ruang: DeepSeek menyertakan
+# reasoning_content sebelum jawaban final, dan output JSON terstruktur
+# (BugAnalysis) lebih verbose dari teks bebas komentar PR.
+MAX_TOKENS_STRUCTURED = MAX_TOKENS * 2
+
 
 class Orchestrator:
     def __init__(self):
@@ -46,11 +52,16 @@ class Orchestrator:
         prompt = build_code_review_prompt(context, search_results)
         return self._call_llm(prompt)
 
-    def fix_bug(self, context: dict, error: dict) -> str:
-        """Entry point untuk Sentry webhook — bug fix."""
+    def fix_bug(self, context: dict, error: dict) -> BugAnalysis | None:
+        """
+        Entry point untuk Sentry webhook — bug fix.
+        Return None kalau semua provider gagal menghasilkan output yang
+        valid sesuai BugAnalysis schema -> caller (worker.py) fallback
+        ke manual GitHub Issue tanpa AI analysis.
+        """
         search_results = self._search_for_error(error)
         prompt = build_bug_fix_prompt(context, error, search_results)
-        return self._call_llm(prompt)
+        return self._call_llm_structured(prompt)
 
     def _enrich_with_search(self, context: dict) -> dict:
         """Tavily search berdasarkan file extension."""
@@ -89,7 +100,7 @@ class Orchestrator:
         return {k: v for k, v in results.items() if v}
 
     def _call_llm(self, prompt: str) -> str:
-        """Kirim prompt ke provider dengan fallback chain."""
+        """Kirim prompt ke provider dengan fallback chain. Dipakai review_code()."""
         for provider in PROVIDER_CHAIN:
             print(f"[Orchestrator] Trying: {provider['name']}")
             result = self._request(prompt, provider)
@@ -100,8 +111,42 @@ class Orchestrator:
 
         return "Error: all providers failed."
 
-    def _request(self, prompt: str, provider: dict) -> str | None:
-        """Satu request ke provider. Return None kalau gagal."""
+    def _call_llm_structured(self, prompt: str) -> BugAnalysis | None:
+        """
+        Kirim prompt ke provider dengan fallback chain, DAN validasi tiap
+        jawaban terhadap BugAnalysis schema sebelum diterima. Dipakai
+        fix_bug() saja -- review_code() tetap pakai _call_llm() di atas,
+        tidak tersentuh.
+
+        Kalau provider menjawab tapi gagal validasi schema (bukan error
+        HTTP/koneksi), itu tetap dianggap gagal -> lanjut ke provider
+        berikutnya di chain, sama seperti gagal request biasa.
+        """
+        for provider in PROVIDER_CHAIN:
+            print(f"[Orchestrator] Trying (structured): {provider['name']}")
+            raw_content = self._request(prompt, provider, json_mode=True, max_tokens=MAX_TOKENS_STRUCTURED)
+
+            if raw_content is None:
+                print(f"[Orchestrator] Failed (request): {provider['name']}, trying next...")
+                continue
+
+            result = validate_llm_output(raw_content)
+            if result is not None:
+                print(f"[Orchestrator] Success (structured): {provider['name']}")
+                return result
+
+            print(f"[Orchestrator] Failed (schema validation): {provider['name']}, trying next...")
+
+        print("[Orchestrator] All providers failed structured validation.")
+        return None
+
+    def _request(self, prompt: str, provider: dict, json_mode: bool = False, max_tokens: int = MAX_TOKENS) -> str | None:
+        """
+        Satu request ke provider. Return None kalau gagal.
+        json_mode=True menambahkan response_format: json_object -- dipakai
+        _call_llm_structured() saja. _call_llm() (review_code) tidak
+        terpengaruh karena defaultnya False dan max_tokens default MAX_TOKENS.
+        """
         api_key = os.getenv(provider["api_key"])
         if not api_key:
             print(f"[Orchestrator] Missing API key: {provider['api_key']}")
@@ -114,11 +159,14 @@ class Orchestrator:
 
         payload = {
             "model"     : provider["model"],
-            "max_tokens": MAX_TOKENS,
+            "max_tokens": max_tokens,
             "messages"  : [
                 {"role": "user", "content": prompt}
             ],
         }
+
+        if json_mode:
+            payload["response_format"] = {"type": "json_object"}
 
         try:
             response = httpx.post(

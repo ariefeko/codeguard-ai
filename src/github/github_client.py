@@ -58,15 +58,18 @@ class GitHubClient:
             print(f"[GitHubClient] Error: {e}")
             return False
 
-    def create_issue(self, title: str, body: str) -> bool:
+    def create_issue(self, title: str, body: str, labels: list[str] | None = None) -> bool:
         """
-        Buat GitHub Issue — fallback kalau tidak ada PR.
+        Buat GitHub Issue — fallback kalau tidak ada PR, atau entry point
+        untuk Sentry bug analysis.
+        labels default ["codeguard-ai"] kalau tidak di-pass -- perilaku
+        lama (dipanggil dari process_github_review) tidak berubah.
         """
         url = f"{self.base_url}/issues"
         payload = {
             "title": title,
             "body": body,
-            "labels": ["codeguard-ai"],
+            "labels": labels if labels is not None else ["codeguard-ai"],
         }
         try:
             response = httpx.post(url, headers=self.headers, json=payload, timeout=10)

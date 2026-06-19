@@ -4,8 +4,8 @@ import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
-from src.worker.worker import get_queue
-from src.worker.worker import get_queue, process_github_review
+from src.worker.worker import get_queue, process_github_review, process_sentry_job
+from src.agents.sentry_agent import SentryAgent
 
 load_dotenv()
 
@@ -104,7 +104,70 @@ def extract_branch(event_type: str, payload: dict) -> str | None:
 
 @router.post("/webhook/sentry")
 async def sentry_webhook(request: Request):
-    payload = await request.json()
-    print("\n=== SENTRY WEBHOOK RECEIVED ===")
-    print(json.dumps(payload, indent=2, ensure_ascii=False))
-    return {"status": "received"}
+    # PENTING: ambil raw bytes SEBELUM parse JSON. Verifikasi signature
+    # butuh body mentah persis seperti yang dikirim Sentry -- kalau kita
+    # parse dulu baru re-serialize, byte-nya bisa beda (urutan key, spasi)
+    # dan signature akan gagal cocok walau datanya identik.
+    raw_body = await request.body()
+    signature = request.headers.get("Sentry-Hook-Signature")
+
+    agent = SentryAgent()
+    if not agent.verify_signature(raw_body, signature):
+        print("[webhook] Sentry signature verification GAGAL — request ditolak")
+        return JSONResponse(
+            status_code=401,
+            content={"status": "rejected", "reason": "invalid signature"},
+        )
+
+    payload = json.loads(raw_body)
+    resource = request.headers.get("Sentry-Hook-Resource", "unknown")
+    action = payload.get("action", "unknown")
+
+    print(f"\n=== SENTRY WEBHOOK: resource={resource} action={action} ===")
+
+    # Resource selain error/issue/event_alert (misal "installation",
+    # "comment") tidak relevan untuk bug analysis -- acknowledge saja
+    if resource not in ("error", "issue", "event_alert"):
+        print(f"[webhook] Resource '{resource}' tidak relevan — diabaikan")
+        return {"status": "ignored", "reason": f"resource '{resource}' not handled"}
+
+    error = agent.parse_error(payload)
+    if error is None:
+        print("[webhook] Tidak ada error context yang bisa diekstrak — diabaikan")
+        return {"status": "ignored", "reason": "no parseable error data"}
+
+    # Owner/repo Sentry TIDAK tahu langsung -- ini bukan event GitHub.
+    # Perlu konfigurasi mapping project Sentry -> repo GitHub.
+    # Sementara hardcode ke env var sampai ada multi-project mapping.
+    owner = os.getenv("CODEGUARD_DEFAULT_OWNER")
+    repo = os.getenv("CODEGUARD_DEFAULT_REPO")
+
+    if not owner or not repo:
+        print("[webhook] CODEGUARD_DEFAULT_OWNER/REPO tidak diset — tidak tahu repo tujuan")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "reason": "no repo mapping configured"},
+        )
+
+    print(f"Error: {error['type']} — {error['message']}")
+    print(f"File: {error['file']}:{error['line']}")
+
+    queue = get_queue()
+    job = queue.enqueue(
+        process_sentry_job,
+        owner, repo,
+        error["type"], error["message"], error["file"], error["line"],
+        error["related_file_paths"],
+        job_timeout=120,
+    )
+
+    print(f"[webhook] Sentry job enqueued: {job.id}")
+
+    return JSONResponse(
+        status_code=202,
+        content={
+            "status": "accepted",
+            "job_id": job.id,
+            "message": "Bug analysis queued — GitHub Issue will appear shortly",
+        },
+    )
