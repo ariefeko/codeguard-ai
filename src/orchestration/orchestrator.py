@@ -3,7 +3,7 @@ import json
 import httpx
 from src.orchestration.prompts import build_code_review_prompt, build_bug_fix_prompt
 from src.orchestration.tavily_client import CodeGuardSearch
-from src.orchestration.schemas import validate_llm_output, BugAnalysis
+from src.orchestration.schema import validate_llm_output, BugAnalysis
 
 
 # Provider endpoints

@@ -57,24 +57,132 @@ class SentryAgent:
         Return dict dengan keys: type, message, file, line, related_file_paths.
         Return None kalau payload tidak punya struktur error yang dikenali
         (misal payload installation/comment, bukan issue/error/alert).
+
+        STRUKTUR DIKONFIRMASI dari payload asli (20 Jun 2026, ModelNotFoundException
+        dari Tagihin via Issue Alert webhook):
+            data.issue.data.exception.values[].stacktrace.frames[]  -- detail lengkap
+            data.issue.data.metadata                                -- ringkasan, sudah
+                                                                        di-pre-filter Sentry
+                                                                        ke frame in_app paling
+                                                                        relevan
+        metadata jadi sumber utama (lebih simpel, sudah dipilihkan Sentry sendiri),
+        exception.values[].stacktrace.frames[] jadi fallback + sumber related_file_paths.
         """
         data = payload.get("data", {})
 
-        # Jalur 1: resource "error" (Business/Enterprise plan)
+        # Jalur utama yang TERKONFIRMASI: data.issue.data.*
+        issue = data.get("issue", {})
+        issue_data = issue.get("data", issue) if isinstance(issue, dict) else {}
+
+        if issue_data.get("metadata") or issue_data.get("exception"):
+            return self._parse_from_issue_data(issue_data)
+
+        # Jalur fallback 1: resource "error" langsung (Business/Enterprise, kemungkinan
+        # struktur lebih flat, belum pernah dikonfirmasi langsung)
         if "error" in data:
             return self._parse_from_error_resource(data["error"])
 
-        # Jalur 2: Issue Alert webhook (Developer plan, gratis)
+        # Jalur fallback 2: data.event langsung (beberapa versi webhook alert rule)
         if "event" in data:
             return self._parse_from_event_resource(data["event"])
 
-        # Jalur 3: resource "issue" tanpa nested event (issue state change,
-        # misal resolved/ignored -- biasanya tidak ada exception detail)
-        if "issue" in data:
-            print("[SentryAgent] Payload issue tanpa detail exception -- skip analysis")
+        # Jalur fallback 3: ada "issue" tapi tanpa metadata/exception (state change,
+        # misal resolved/ignored -- tidak ada detail untuk dianalisis)
+        if issue:
+            print("[SentryAgent] Payload issue tanpa metadata/exception -- skip analysis")
             return None
 
         print(f"[SentryAgent] Struktur payload tidak dikenali. Keys: {list(data.keys())}")
+        return None
+
+    @staticmethod
+    def _strip_leading_slash(filepath: str) -> str:
+        """
+        Sentry kasih path absolut container (/app/Livewire/Tagihan/Index.php),
+        tapi GitHub API butuh path relatif ke root repo (app/Livewire/Tagihan/Index.php).
+        Confirmed dari payload asli: semua filename punya leading slash.
+        """
+        return filepath.lstrip("/") if filepath else filepath
+
+    def _parse_from_issue_data(self, issue_data: dict) -> dict | None:
+        """
+        Parse data.issue.data.* -- struktur TERKONFIRMASI dari payload asli.
+        metadata sudah berisi filename/function yang sudah Sentry pre-filter ke
+        frame in_app paling relevan -- jadi pakai ini sebagai sumber utama,
+        bukan filter manual dari exception.values[].stacktrace.frames[].
+        """
+        metadata = issue_data.get("metadata", {})
+        exception_values = issue_data.get("exception", {}).get("values", [])
+
+        # related_file_paths tetap perlu digali dari stacktrace frames lengkap,
+        # karena metadata cuma kasih SATU file (yang paling relevan), bukan semua
+        # file in_app yang ikut terlibat di call stack.
+        related_paths = []
+        if exception_values:
+            frames = exception_values[0].get("stacktrace", {}).get("frames", [])
+            related_paths = list({
+                self._strip_leading_slash(f.get("filename"))
+                for f in frames
+                if f.get("filename") and f.get("in_app")
+            })
+
+        if metadata.get("filename"):
+            # Sumber utama: metadata, sudah dipilihkan Sentry
+            file_path = self._strip_leading_slash(metadata.get("filename", ""))
+
+            # metadata kadang punya field "lineno"/"line" langsung -- cek dulu
+            # sebelum coba gali dari exception.values (yang bisa saja kosong,
+            # terutama untuk payload jenis "issue" tanpa detail exception baru,
+            # misal action=unresolved/escalated yang cuma state change).
+            line = metadata.get("lineno") or metadata.get("line")
+            if line is None and exception_values:
+                line = self._extract_line_for_file(exception_values, metadata.get("filename", ""))
+
+            if line is None:
+                print(
+                    f"[SentryAgent] Line number tidak ditemukan untuk {file_path} -- "
+                    f"exception_values kosong: {not exception_values}, "
+                    f"metadata keys: {list(metadata.keys())}"
+                )
+
+            return {
+                "type": metadata.get("type", "Unknown"),
+                "message": metadata.get("value", ""),
+                "file": file_path,
+                "line": line,
+                "related_file_paths": related_paths or [file_path],
+            }
+
+        # Fallback: metadata tidak ada filename, gali manual dari exception frames
+        if exception_values:
+            primary = exception_values[0]
+            frames = primary.get("stacktrace", {}).get("frames", [])
+            in_app_frames = [f for f in frames if f.get("in_app")]
+            target_frame = in_app_frames[-1] if in_app_frames else (frames[-1] if frames else {})
+
+            return {
+                "type": primary.get("type", "Unknown"),
+                "message": primary.get("value", ""),
+                "file": self._strip_leading_slash(target_frame.get("filename", "")),
+                "line": target_frame.get("lineno"),
+                "related_file_paths": related_paths,
+            }
+
+        print("[SentryAgent] issue_data tidak punya metadata.filename maupun exception.values")
+        return None
+
+    @staticmethod
+    def _extract_line_for_file(exception_values: list, filename: str) -> int | None:
+        """
+        metadata tidak selalu menyertakan line number secara langsung -- gali
+        dari frame yang filename-nya cocok dengan metadata.filename.
+        """
+        if not exception_values:
+            return None
+        frames = exception_values[0].get("stacktrace", {}).get("frames", [])
+        for f in frames:
+            if f.get("filename") == filename:
+                return f.get("lineno")
         return None
 
     def _parse_from_error_resource(self, error: dict) -> dict | None:
@@ -93,14 +201,14 @@ class SentryAgent:
         target_frame = in_app_frames[-1] if in_app_frames else (frames[-1] if frames else {})
 
         related_paths = list({
-            f.get("filename") for f in frames
+            self._strip_leading_slash(f.get("filename")) for f in frames
             if f.get("filename") and f.get("in_app")
         })
 
         return {
             "type": primary.get("type", error.get("metadata", {}).get("type", "Unknown")),
             "message": primary.get("value", error.get("message", "")),
-            "file": target_frame.get("filename", ""),
+            "file": self._strip_leading_slash(target_frame.get("filename", "")),
             "line": target_frame.get("lineno"),
             "related_file_paths": related_paths,
         }
@@ -119,14 +227,15 @@ class SentryAgent:
             in_app_frames = [f for f in frames if f.get("in_app")]
             target_frame = in_app_frames[-1] if in_app_frames else (frames[-1] if frames else {})
             related_paths = list({
-                f.get("filename") for f in frames
+                self._strip_leading_slash(f.get("filename"))
+                for f in frames
                 if f.get("filename") and f.get("in_app")
             })
 
             return {
                 "type": primary.get("type", "Unknown"),
                 "message": primary.get("value", event.get("message", "")),
-                "file": target_frame.get("filename", ""),
+                "file": self._strip_leading_slash(target_frame.get("filename", "")),
                 "line": target_frame.get("lineno"),
                 "related_file_paths": related_paths,
             }

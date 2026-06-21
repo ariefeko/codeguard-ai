@@ -98,7 +98,7 @@ def process_sentry_job(
 
     if analysis is None:
         # Semua provider gagal (token habis, validasi schema gagal, atau
-        # koneksi error). Jangan crash, jangan diam saja -- fallback ke
+        # koneksi error). Jangan crash atau diam -- fallback ke
         # Level 1 minimal: Issue manual dengan raw error data.
         print("[Worker] Sentry analysis gagal untuk semua provider — fallback ke manual issue")
         title = f"🐛 [Bug] {error_type}"

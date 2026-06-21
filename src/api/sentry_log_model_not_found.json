@@ -1,0 +1,723 @@
+"exception": {
+    "values": [
+      {
+        "type": "Illuminate\\Database\\Eloquent\\ModelNotFoundException",
+        "value": "No query results for model [App\\Models\\Tagihan] 99999999",
+        "stacktrace": {
+          "frames": [
+            {
+              "filename": "/artisan",
+              "abs_path": "/var/www/html/artisan",
+              "lineno": 16,
+              "pre_context": [
+                "",
+                "// Bootstrap Laravel and handle the command...",
+                "/** @var Application $app */",
+                "$app = require_once __DIR__.'/bootstrap/app.php';",
+                ""
+              ],
+              "context_line": "$status = $app->handleCommand(new ArgvInput);",
+              "post_context": [
+                "",
+                "exit($status);",
+                ""
+              ],
+              "in_app": false,
+              "data": {
+                "client_in_app": false
+              }
+            },
+            {
+              "function": "Illuminate\\Foundation\\Application::handleCommand",
+              "raw_function": "Illuminate\\Foundation\\Application::handleCommand",
+              "filename": "/vendor/laravel/framework/src/Illuminate/Foundation/Application.php",
+              "abs_path": "/var/www/html/vendor/laravel/framework/src/Illuminate/Foundation/Application.php",
+              "lineno": 1235,
+              "pre_context": [
+                "     */",
+                "    public function handleCommand(InputInterface $input)",
+                "    {",
+                "        $kernel = $this->make(ConsoleKernelContract::class);",
+                ""
+              ],
+              "context_line": "        $status = $kernel->handle(",
+              "post_context": [
+                "            $input,",
+                "            new ConsoleOutput",
+                "        );",
+                "",
+                "        $kernel->terminate($input, $status);"
+              ],
+              "in_app": false,
+              "data": {
+                "client_in_app": false
+              }
+            },
+            {
+              "function": "Illuminate\\Foundation\\Console\\Kernel::handle",
+              "raw_function": "Illuminate\\Foundation\\Console\\Kernel::handle",
+              "filename": "/vendor/laravel/framework/src/Illuminate/Foundation/Console/Kernel.php",
+              "abs_path": "/var/www/html/vendor/laravel/framework/src/Illuminate/Foundation/Console/Kernel.php",
+              "lineno": 198,
+              "pre_context": [
+                "                $this->bootstrapWithoutBootingProviders();",
+                "            }",
+                "",
+                "            $this->bootstrap();",
+                ""
+              ],
+              "context_line": "            return $this->getArtisan()->run($input, $output);",
+              "post_context": [
+                "        } catch (Throwable $e) {",
+                "            $this->reportException($e);",
+                "",
+                "            $this->renderException($output, $e);",
+                ""
+              ],
+              "in_app": false,
+              "data": {
+                "client_in_app": false
+              }
+            },
+            {
+              "function": "Symfony\\Component\\Console\\Application::run",
+              "raw_function": "Symfony\\Component\\Console\\Application::run",
+              "filename": "/vendor/symfony/console/Application.php",
+              "abs_path": "/var/www/html/vendor/symfony/console/Application.php",
+              "lineno": 195,
+              "pre_context": [
+                "        $prevShellVerbosity = [$_ENV['SHELL_VERBOSITY'] ?? $empty, $_SERVER['SHELL_VERBOSITY'] ?? $empty, getenv('SHELL_VERBOSITY')];",
+                "",
+                "        try {",
+                "            $this->configureIO($input, $output);",
+                ""
+              ],
+              "context_line": "            $exitCode = $this->doRun($input, $output);",
+              "post_context": [
+                "        } catch (\\Throwable $e) {",
+                "            if ($e instanceof \\Exception && !$this->catchExceptions) {",
+                "                throw $e;",
+                "            }",
+                "            if (!$e instanceof \\Exception && !$this->catchErrors) {"
+              ],
+              "in_app": false,
+              "data": {
+                "client_in_app": false
+              }
+            },
+            {
+              "function": "Symfony\\Component\\Console\\Application::doRun",
+              "raw_function": "Symfony\\Component\\Console\\Application::doRun",
+              "filename": "/vendor/symfony/console/Application.php",
+              "abs_path": "/var/www/html/vendor/symfony/console/Application.php",
+              "lineno": 356,
+              "pre_context": [
+                "        if ($command instanceof LazyCommand) {",
+                "            $command = $command->getCommand();",
+                "        }",
+                "",
+                "        $this->runningCommand = $command;"
+              ],
+              "context_line": "        $exitCode = $this->doRunCommand($command, $input, $output);",
+              "post_context": [
+                "        $this->runningCommand = null;",
+                "",
+                "        return $exitCode;",
+                "    }",
+                ""
+              ],
+              "in_app": false,
+              "data": {
+                "client_in_app": false
+              }
+            },
+            {
+              "function": "Symfony\\Component\\Console\\Application::doRunCommand",
+              "raw_function": "Symfony\\Component\\Console\\Application::doRunCommand",
+              "filename": "/vendor/symfony/console/Application.php",
+              "abs_path": "/var/www/html/vendor/symfony/console/Application.php",
+              "lineno": 1102,
+              "pre_context": [
+                "",
+                "        try {",
+                "            $this->dispatcher->dispatch($event, ConsoleEvents::COMMAND);",
+                "",
+                "            if ($event->commandShouldRun()) {"
+              ],
+              "context_line": "                $exitCode = $command->run($input, $output);",
+              "post_context": [
+                "            } else {",
+                "                $exitCode = ConsoleCommandEvent::RETURN_CODE_DISABLED;",
+                "            }",
+                "        } catch (\\Throwable $e) {",
+                "            $event = new ConsoleErrorEvent($input, $output, $e, $command);"
+              ],
+              "in_app": false,
+              "data": {
+                "client_in_app": false
+              }
+            },
+            {
+              "function": "Illuminate\\Console\\Command::run",
+              "raw_function": "Illuminate\\Console\\Command::run",
+              "filename": "/vendor/laravel/framework/src/Illuminate/Console/Command.php",
+              "abs_path": "/var/www/html/vendor/laravel/framework/src/Illuminate/Console/Command.php",
+              "lineno": 180,
+              "pre_context": [
+                "        $this->components = $this->laravel->make(Factory::class, ['output' => $this->output]);",
+                "",
+                "        $this->configurePrompts($input);",
+                "",
+                "        try {"
+              ],
+              "context_line": "            return parent::run(",
+              "post_context": [
+                "                $this->input = $input, $this->output",
+                "            );",
+                "        } finally {",
+                "            $this->untrap();",
+                "        }"
+              ],
+              "in_app": false,
+              "data": {
+                "client_in_app": false
+              }
+            },
+            {
+              "function": "Symfony\\Component\\Console\\Command\\Command::run",
+              "raw_function": "Symfony\\Component\\Console\\Command\\Command::run",
+              "filename": "/vendor/symfony/console/Command/Command.php",
+              "abs_path": "/var/www/html/vendor/symfony/console/Command/Command.php",
+              "lineno": 341,
+              "pre_context": [
+                "",
+                "        if ($this->code) {",
+                "            return ($this->code)($input, $output);",
+                "        }",
+                ""
+              ],
+              "context_line": "        return $this->execute($input, $output);",
+              "post_context": [
+                "    }",
+                "",
+                "    /**",
+                "     * Supplies suggestions when resolving possible completion options for input (e.g. option or argument).",
+                "     */"
+              ],
+              "in_app": false,
+              "data": {
+                "client_in_app": false
+              }
+            },
+            {
+              "function": "Illuminate\\Console\\Command::execute",
+              "raw_function": "Illuminate\\Console\\Command::execute",
+              "filename": "/vendor/laravel/framework/src/Illuminate/Console/Command.php",
+              "abs_path": "/var/www/html/vendor/laravel/framework/src/Illuminate/Console/Command.php",
+              "lineno": 211,
+              "pre_context": [
+                "        }",
+                "",
+                "        $method = method_exists($this, 'handle') ? 'handle' : '__invoke';",
+                "",
+                "        try {"
+              ],
+              "context_line": "            return (int) $this->laravel->call([$this, $method]);",
+              "post_context": [
+                "        } catch (ManuallyFailedException $e) {",
+                "            $this->components->error($e->getMessage());",
+                "",
+                "            return static::FAILURE;",
+                "        } finally {"
+              ],
+              "in_app": false,
+              "data": {
+                "client_in_app": false
+              }
+            },
+            {
+              "function": "Illuminate\\Container\\Container::call",
+              "raw_function": "Illuminate\\Container\\Container::call",
+              "filename": "/vendor/laravel/framework/src/Illuminate/Container/Container.php",
+              "abs_path": "/var/www/html/vendor/laravel/framework/src/Illuminate/Container/Container.php",
+              "lineno": 799,
+              "pre_context": [
+                "            $this->buildStack[] = $className;",
+                "",
+                "            $pushedToBuildStack = true;",
+                "        }",
+                ""
+              ],
+              "context_line": "        $result = BoundMethod::call($this, $callback, $parameters, $defaultMethod);",
+              "post_context": [
+                "",
+                "        if ($pushedToBuildStack) {",
+                "            array_pop($this->buildStack);",
+                "        }",
+                ""
+              ],
+              "in_app": false,
+              "data": {
+                "client_in_app": false
+              }
+            },
+            {
+              "function": "Illuminate\\Container\\BoundMethod::call",
+              "raw_function": "Illuminate\\Container\\BoundMethod::call",
+              "filename": "/vendor/laravel/framework/src/Illuminate/Container/BoundMethod.php",
+              "abs_path": "/var/www/html/vendor/laravel/framework/src/Illuminate/Container/BoundMethod.php",
+              "lineno": 35,
+              "pre_context": [
+                "",
+                "        if (static::isCallableWithAtSign($callback) || $defaultMethod) {",
+                "            return static::callClass($container, $callback, $parameters, $defaultMethod);",
+                "        }",
+                ""
+              ],
+              "context_line": "        return static::callBoundMethod($container, $callback, function () use ($container, $callback, $parameters) {",
+              "post_context": [
+                "            return $callback(...array_values(static::getMethodDependencies($container, $callback, $parameters)));",
+                "        });",
+                "    }",
+                "",
+                "    /**"
+              ],
+              "in_app": false,
+              "data": {
+                "client_in_app": false
+              }
+            },
+            {
+              "function": "Illuminate\\Container\\BoundMethod::callBoundMethod",
+              "raw_function": "Illuminate\\Container\\BoundMethod::callBoundMethod",
+              "filename": "/vendor/laravel/framework/src/Illuminate/Container/BoundMethod.php",
+              "abs_path": "/var/www/html/vendor/laravel/framework/src/Illuminate/Container/BoundMethod.php",
+              "lineno": 96,
+              "pre_context": [
+                "",
+                "        if ($container->hasMethodBinding($method)) {",
+                "            return $container->callMethodBinding($method, $callback[0]);",
+                "        }",
+                ""
+              ],
+              "context_line": "        return Util::unwrapIfClosure($default);",
+              "post_context": [
+                "    }",
+                "",
+                "    /**",
+                "     * Normalize the given callback into a Class@method string.",
+                "     *"
+              ],
+              "in_app": false,
+              "data": {
+                "client_in_app": false
+              }
+            },
+            {
+              "function": "Illuminate\\Container\\Util::unwrapIfClosure",
+              "raw_function": "Illuminate\\Container\\Util::unwrapIfClosure",
+              "filename": "/vendor/laravel/framework/src/Illuminate/Container/Util.php",
+              "abs_path": "/var/www/html/vendor/laravel/framework/src/Illuminate/Container/Util.php",
+              "lineno": 43,
+              "pre_context": [
+                "     * @param  mixed  ...$args",
+                "     * @return mixed",
+                "     */",
+                "    public static function unwrapIfClosure($value, ...$args)",
+                "    {"
+              ],
+              "context_line": "        return $value instanceof Closure ? $value(...$args) : $value;",
+              "post_context": [
+                "    }",
+                "",
+                "    /**",
+                "     * Get the class name of the given parameter's type, if possible.",
+                "     *"
+              ],
+              "in_app": false,
+              "data": {
+                "client_in_app": false
+              }
+            },
+            {
+              "function": "Illuminate\\Container\\BoundMethod::{closure:Illuminate\\Container\\BoundMethod::call():35}",
+              "raw_function": "Illuminate\\Container\\BoundMethod::{closure:Illuminate\\Container\\BoundMethod::call():35}",
+              "filename": "/vendor/laravel/framework/src/Illuminate/Container/BoundMethod.php",
+              "abs_path": "/var/www/html/vendor/laravel/framework/src/Illuminate/Container/BoundMethod.php",
+              "lineno": 36,
+              "pre_context": [
+                "        if (static::isCallableWithAtSign($callback) || $defaultMethod) {",
+                "            return static::callClass($container, $callback, $parameters, $defaultMethod);",
+                "        }",
+                "",
+                "        return static::callBoundMethod($container, $callback, function () use ($container, $callback, $parameters) {"
+              ],
+              "context_line": "            return $callback(...array_values(static::getMethodDependencies($container, $callback, $parameters)));",
+              "post_context": [
+                "        });",
+                "    }",
+                "",
+                "    /**",
+                "     * Call a string reference to a class using Class@method syntax."
+              ],
+              "in_app": false,
+              "data": {
+                "client_in_app": false
+              }
+            },
+            {
+              "function": "Laravel\\Tinker\\Console\\TinkerCommand::handle",
+              "raw_function": "Laravel\\Tinker\\Console\\TinkerCommand::handle",
+              "filename": "/vendor/laravel/tinker/src/Console/TinkerCommand.php",
+              "abs_path": "/var/www/html/vendor/laravel/tinker/src/Console/TinkerCommand.php",
+              "lineno": 86,
+              "pre_context": [
+                "",
+                "            return 0;",
+                "        }",
+                "",
+                "        try {"
+              ],
+              "context_line": "            return $shell->run();",
+              "post_context": [
+                "        } finally {",
+                "            $loader->unregister();",
+                "        }",
+                "    }",
+                ""
+              ],
+              "in_app": false,
+              "data": {
+                "client_in_app": false
+              }
+            },
+            {
+              "function": "Psy\\Shell::run",
+              "raw_function": "Psy\\Shell::run",
+              "filename": "/vendor/psy/psysh/src/Shell.php",
+              "abs_path": "/var/www/html/vendor/psy/psysh/src/Shell.php",
+              "lineno": 512,
+              "pre_context": [
+                "",
+                "        $this->setAutoExit(false);",
+                "        $this->setCatchExceptions(false);",
+                "",
+                "        try {"
+              ],
+              "context_line": "            return parent::run($input, $output);",
+              "post_context": [
+                "        } catch (BreakException $e) {",
+                "            // BreakException from ProcessForker or exit() - return its exit code",
+                "            return $e->getCode();",
+                "        } catch (\\Throwable $e) {",
+                "            $this->writeException($e);"
+              ],
+              "in_app": false,
+              "data": {
+                "client_in_app": false
+              }
+            },
+            {
+              "function": "Symfony\\Component\\Console\\Application::run",
+              "raw_function": "Symfony\\Component\\Console\\Application::run",
+              "filename": "/vendor/symfony/console/Application.php",
+              "abs_path": "/var/www/html/vendor/symfony/console/Application.php",
+              "lineno": 195,
+              "pre_context": [
+                "        $prevShellVerbosity = [$_ENV['SHELL_VERBOSITY'] ?? $empty, $_SERVER['SHELL_VERBOSITY'] ?? $empty, getenv('SHELL_VERBOSITY')];",
+                "",
+                "        try {",
+                "            $this->configureIO($input, $output);",
+                ""
+              ],
+              "context_line": "            $exitCode = $this->doRun($input, $output);",
+              "post_context": [
+                "        } catch (\\Throwable $e) {",
+                "            if ($e instanceof \\Exception && !$this->catchExceptions) {",
+                "                throw $e;",
+                "            }",
+                "            if (!$e instanceof \\Exception && !$this->catchErrors) {"
+              ],
+              "in_app": false,
+              "data": {
+                "client_in_app": false
+              }
+            },
+            {
+              "function": "Psy\\Shell::doRun",
+              "raw_function": "Psy\\Shell::doRun",
+              "filename": "/vendor/psy/psysh/src/Shell.php",
+              "abs_path": "/var/www/html/vendor/psy/psysh/src/Shell.php",
+              "lineno": 542,
+              "pre_context": [
+                "        $this->resetCodeBuffer();",
+                "        $this->warmAutoloader();",
+                "",
+                "        if ($input->isInteractive()) {",
+                "            // @todo should it be possible to have raw output in an interactive run?"
+              ],
+              "context_line": "            return $this->doInteractiveRun();",
+              "post_context": [
+                "        } else {",
+                "            return $this->doNonInteractiveRun($this->config->rawOutput());",
+                "        }",
+                "    }",
+                ""
+              ],
+              "in_app": false,
+              "data": {
+                "client_in_app": false
+              }
+            },
+            {
+              "function": "Psy\\Shell::doInteractiveRun",
+              "raw_function": "Psy\\Shell::doInteractiveRun",
+              "filename": "/vendor/psy/psysh/src/Shell.php",
+              "abs_path": "/var/www/html/vendor/psy/psysh/src/Shell.php",
+              "lineno": 572,
+              "pre_context": [
+                "",
+                "        try {",
+                "            $this->beforeRun();",
+                "            $this->loadIncludes();",
+                "            $loop = new ExecutionLoopClosure($this);"
+              ],
+              "context_line": "            $exitCode = $loop->execute();",
+              "post_context": [
+                "            $this->afterRun($exitCode ?? 0);",
+                "",
+                "            return $exitCode ?? 0;",
+                "        } catch (ThrowUpException $e) {",
+                "            throw $e->getPrevious();"
+              ],
+              "in_app": false,
+              "data": {
+                "client_in_app": false
+              }
+            },
+            {
+              "function": "Psy\\ExecutionClosure::execute",
+              "raw_function": "Psy\\ExecutionClosure::execute",
+              "filename": "/vendor/psy/psysh/src/ExecutionClosure.php",
+              "abs_path": "/var/www/html/vendor/psy/psysh/src/ExecutionClosure.php",
+              "lineno": 90,
+              "pre_context": [
+                "     */",
+                "    public function execute()",
+                "    {",
+                "        $closure = $this->closure;",
+                ""
+              ],
+              "context_line": "        return $closure();",
+              "post_context": [
+                "    }",
+                "}",
+                ""
+              ],
+              "in_app": false,
+              "data": {
+                "client_in_app": false
+              }
+            },
+            {
+              "function": "{closure:Psy\\ExecutionLoopClosure::__construct():30}",
+              "filename": "/vendor/psy/psysh/src/ExecutionLoopClosure.php",
+              "abs_path": "/var/www/html/vendor/psy/psysh/src/ExecutionLoopClosure.php",
+              "lineno": 55,
+              "pre_context": [
+                "",
+                "                        // Convert all errors to exceptions",
+                "                        \\set_error_handler([$__psysh__, 'handleError']);",
+                "",
+                "                        // Evaluate the current code buffer"
+              ],
+              "context_line": "                        $_ = eval($__psysh__->onExecute($__psysh__->flushCode() ?: ExecutionClosure::NOOP_INPUT));",
+              "post_context": [
+                "                    } catch (\\Throwable $_e) {",
+                "                        // Clean up on our way out.",
+                "                        if (\\ob_get_level() > 0) {",
+                "                            \\ob_end_clean();",
+                "                        }"
+              ],
+              "in_app": false,
+              "data": {
+                "client_in_app": false
+              }
+            },
+            {
+              "function": "eval",
+              "filename": "/vendor/psy/psysh/src/ExecutionLoopClosure.php",
+              "abs_path": "/var/www/html/vendor/psy/psysh/src/ExecutionLoopClosure.php",
+              "lineno": 55,
+              "pre_context": [
+                "",
+                "                        // Convert all errors to exceptions",
+                "                        \\set_error_handler([$__psysh__, 'handleError']);",
+                "",
+                "                        // Evaluate the current code buffer"
+              ],
+              "context_line": "                        $_ = eval($__psysh__->onExecute($__psysh__->flushCode() ?: ExecutionClosure::NOOP_INPUT));",
+              "post_context": [
+                "                    } catch (\\Throwable $_e) {",
+                "                        // Clean up on our way out.",
+                "                        if (\\ob_get_level() > 0) {",
+                "                            \\ob_end_clean();",
+                "                        }"
+              ],
+              "in_app": false,
+              "data": {
+                "client_in_app": false
+              }
+            },
+            {
+              "function": "App\\Livewire\\Tagihan\\Index::toggleBayar",
+              "raw_function": "App\\Livewire\\Tagihan\\Index::toggleBayar",
+              "filename": "/app/Livewire/Tagihan/Index.php",
+              "abs_path": "/var/www/html/app/Livewire/Tagihan/Index.php",
+              "lineno": 21,
+              "pre_context": [
+                "        ])->layout('layouts.app');",
+                "    }",
+                "    ",
+                "    public function toggleBayar($id)",
+                "    {"
+              ],
+              "context_line": "        $tagihan = \\App\\Models\\Tagihan::findOrFail($id);",
+              "post_context": [
+                "        $tagihan->status_bayar = !$tagihan->status_bayar;",
+                "        $tagihan->save();",
+                "    }",
+                "}",
+                ""
+              ],
+              "in_app": true,
+              "data": {
+                "client_in_app": true
+              }
+            },
+            {
+              "function": "Illuminate\\Database\\Eloquent\\Model::__callStatic",
+              "raw_function": "Illuminate\\Database\\Eloquent\\Model::__callStatic",
+              "filename": "/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Model.php",
+              "abs_path": "/var/www/html/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Model.php",
+              "lineno": 2556,
+              "pre_context": [
+                "    {",
+                "        if (static::isScopeMethodWithAttribute($method)) {",
+                "            return static::query()->$method(...$parameters);",
+                "        }",
+                ""
+              ],
+              "context_line": "        return (new static)->$method(...$parameters);",
+              "post_context": [
+                "    }",
+                "",
+                "    /**",
+                "     * Convert the model to its string representation.",
+                "     *"
+              ],
+              "in_app": false,
+              "data": {
+                "client_in_app": false
+              }
+            },
+            {
+              "function": "Illuminate\\Database\\Eloquent\\Model::__call",
+              "raw_function": "Illuminate\\Database\\Eloquent\\Model::__call",
+              "filename": "/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Model.php",
+              "abs_path": "/var/www/html/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Model.php",
+              "lineno": 2540,
+              "pre_context": [
+                "        if (Str::startsWith($method, 'through') &&",
+                "            method_exists($this, $relationMethod = (new SupportStringable($method))->after('through')->lcfirst()->toString())) {",
+                "            return $this->through($relationMethod);",
+                "        }",
+                ""
+              ],
+              "context_line": "        return $this->forwardCallTo($this->newQuery(), $method, $parameters);",
+              "post_context": [
+                "    }",
+                "",
+                "    /**",
+                "     * Handle dynamic static method calls into the model.",
+                "     *"
+              ],
+              "in_app": false,
+              "data": {
+                "client_in_app": false
+              }
+            },
+            {
+              "function": "Illuminate\\Database\\Eloquent\\Model::forwardCallTo",
+              "raw_function": "Illuminate\\Database\\Eloquent\\Model::forwardCallTo",
+              "filename": "/vendor/laravel/framework/src/Illuminate/Support/Traits/ForwardsCalls.php",
+              "abs_path": "/var/www/html/vendor/laravel/framework/src/Illuminate/Support/Traits/ForwardsCalls.php",
+              "lineno": 23,
+              "pre_context": [
+                "     * @throws \\BadMethodCallException",
+                "     */",
+                "    protected function forwardCallTo($object, $method, $parameters)",
+                "    {",
+                "        try {"
+              ],
+              "context_line": "            return $object->{$method}(...$parameters);",
+              "post_context": [
+                "        } catch (Error|BadMethodCallException $e) {",
+                "            $pattern = '~^Call to undefined method (?P<class>[^:]+)::(?P<method>[^\\(]+)\\(\\)$~';",
+                "",
+                "            if (! preg_match($pattern, $e->getMessage(), $matches)) {",
+                "                throw $e;"
+              ],
+              "in_app": false,
+              "data": {
+                "client_in_app": false
+              }
+            },
+            {
+              "function": "Illuminate\\Database\\Eloquent\\Builder::findOrFail",
+              "raw_function": "Illuminate\\Database\\Eloquent\\Builder::findOrFail",
+              "filename": "/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Builder.php",
+              "abs_path": "/var/www/html/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Builder.php",
+              "lineno": 630,
+              "pre_context": [
+                "",
+                "            return $result;",
+                "        }",
+                "",
+                "        if (is_null($result)) {"
+              ],
+              "context_line": "            throw (new ModelNotFoundException)->setModel(",
+              "post_context": [
+                "                get_class($this->model), $id",
+                "            );",
+                "        }",
+                "",
+                "        return $result;"
+              ],
+              "in_app": false,
+              "data": {
+                "client_in_app": false
+              }
+            }
+          ]
+        },
+        "mechanism": {
+          "type": "generic",
+          "handled": true,
+          "data": {
+            "code": 0
+          }
+        }
+      }
+    ]
+  },
+  
+  
+  
+  "metadata": {
+    "filename": "/app/Livewire/Tagihan/Index.php",
+    "function": "App\\Livewire\\Tagihan\\Index::toggleBayar",
+    "in_app_frame_mix": "mixed",
+    "type": "Illuminate\\Database\\Eloquent\\ModelNotFoundException",
+    "value": "No query results for model [App\\Models\\Tagihan] 99999999"
+  },
