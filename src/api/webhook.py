@@ -152,6 +152,27 @@ async def sentry_webhook(request: Request):
     print(f"Error: {error['type']} — {error['message']}")
     print(f"File: {error['file']}:{error['line']}")
 
+    # Deduplication via Redis -- satu Sentry issue_id cukup diproses SEKALI
+    # dalam 24 jam, terlepas berapa kali Sentry kirim webhook untuk issue yang
+    # sama (bisa kirim lewat event_alert DAN issue action=created sekaligus).
+    issue_id = error.get("issue_id", "")
+    if issue_id:
+        import redis as redis_lib
+        r = redis_lib.from_url(os.getenv("REDIS_URL"))
+        dedup_key = f"codeguard:sentry:processed:{issue_id}"
+        if r.exists(dedup_key):
+            print(f"[webhook] Issue {issue_id} sudah diproses sebelumnya — diabaikan")
+            return JSONResponse(
+                status_code=200,
+                content={"status": "ignored", "reason": "already processed"},
+            )
+        # Set key dengan TTL 24 jam SEBELUM enqueue -- kalau webhook kedua
+        # datang milidetik setelah yang pertama, ini pastikan cuma satu job
+        # yang masuk queue (bukan dua job yang race condition)
+        r.setex(dedup_key, 86400, "1")
+    else:
+        print("[webhook] Tidak ada issue_id -- deduplication dilewati")
+
     queue = get_queue()
     job = queue.enqueue(
         process_sentry_job,
