@@ -77,11 +77,9 @@ class SentryAgent:
         issue_id = (
             str(issue.get("id", ""))
             or str(data.get("issue_id", ""))
+            or str(data.get("event", {}).get("issue_id", ""))
             or ""
         )
-
-        # DEBUG SEMENTARA -- hapus setelah issue_id lokasi dikonfirmasi
-        print(f"[SentryAgent] DEBUG issue_id='{issue_id}' data.keys={list(data.keys())} issue.keys={list(issue.keys()) if isinstance(issue, dict) else 'bukan dict'}")
 
         # Jalur utama yang TERKONFIRMASI: data.issue.data.*
         issue_data = issue.get("data", issue) if isinstance(issue, dict) else {}
