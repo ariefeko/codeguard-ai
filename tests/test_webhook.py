@@ -123,7 +123,7 @@ class TestSentryDedup:
         }
 
         with patch("src.api.webhook.SentryAgent") as agent_cls, patch(
-            "src.api.webhook.redis_lib.from_url",
+            "src.api.webhook.get_redis_connection",
             return_value=redis_client,
         ), patch("src.api.webhook.get_queue", return_value=queue):
             agent = agent_cls.return_value

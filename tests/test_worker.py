@@ -3,6 +3,49 @@ from unittest.mock import MagicMock, patch
 from src.worker import worker
 
 
+def clear_redis_env(monkeypatch):
+    for name in (
+        "REDIS_URL",
+        "REDIS_PRIVATE_URL",
+        "REDIS_PUBLIC_URL",
+        "REDISHOST",
+        "REDIS_HOST",
+        "REDISPORT",
+        "REDIS_PORT",
+        "REDISPASSWORD",
+        "REDIS_PASSWORD",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+
+def test_get_redis_url_accepts_full_redis_url(monkeypatch):
+    clear_redis_env(monkeypatch)
+    monkeypatch.setenv("REDIS_URL", "redis://default:secret@redis.railway.internal:6379")
+
+    assert worker.get_redis_url() == "redis://default:secret@redis.railway.internal:6379"
+
+
+def test_get_redis_url_builds_from_host_port_password(monkeypatch):
+    clear_redis_env(monkeypatch)
+    monkeypatch.setenv("REDISHOST", "redis.railway.internal")
+    monkeypatch.setenv("REDISPORT", "6379")
+    monkeypatch.setenv("REDISPASSWORD", "secret")
+
+    assert worker.get_redis_url() == "redis://:secret@redis.railway.internal:6379"
+
+
+def test_get_redis_url_rejects_url_without_scheme(monkeypatch):
+    clear_redis_env(monkeypatch)
+    monkeypatch.setenv("REDIS_URL", "redis.railway.internal:6379")
+
+    try:
+        worker.get_redis_url()
+    except ValueError as exc:
+        assert "must start with" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError")
+
+
 def test_github_review_uses_pr_number_from_webhook():
     context_builder = MagicMock()
     context_builder.build.return_value = {

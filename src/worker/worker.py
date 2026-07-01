@@ -9,9 +9,40 @@ from src.utils.formatters import format_pr_comment, format_bug_issue, format_bug
 
 load_dotenv()
 
+REDIS_URL_SCHEMES = ("redis://", "rediss://", "unix://")
+
+
+def get_redis_url() -> str:
+    for name in ("REDIS_URL", "REDIS_PRIVATE_URL", "REDIS_PUBLIC_URL"):
+        value = os.getenv(name)
+        if not value:
+            continue
+
+        value = value.strip()
+        if value.startswith(REDIS_URL_SCHEMES):
+            return value
+
+        raise ValueError(
+            f"{name} must start with one of {', '.join(REDIS_URL_SCHEMES)}. "
+            "Set it to the full Redis connection URL from Railway, not just host:port."
+        )
+
+    host = os.getenv("REDISHOST") or os.getenv("REDIS_HOST")
+    port = os.getenv("REDISPORT") or os.getenv("REDIS_PORT") or "6379"
+    password = os.getenv("REDISPASSWORD") or os.getenv("REDIS_PASSWORD")
+
+    if host:
+        auth = f":{password}@" if password else ""
+        return f"redis://{auth}{host}:{port}"
+
+    raise RuntimeError(
+        "Redis connection is not configured. Set REDIS_URL to a full URL like "
+        "redis://default:<password>@<host>:<port> or connect a Railway Redis service."
+    )
+
 
 def get_redis_connection():
-    return redis.from_url(os.getenv("REDIS_URL"))
+    return redis.from_url(get_redis_url())
 
 
 def get_queue(name: str = "codeguard") -> Queue:

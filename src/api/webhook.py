@@ -3,11 +3,15 @@ import json
 import hashlib
 import hmac
 import httpx
-import redis as redis_lib
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
-from src.worker.worker import get_queue, process_github_review, process_sentry_job
+from src.worker.worker import (
+    get_queue,
+    get_redis_connection,
+    process_github_review,
+    process_sentry_job,
+)
 from src.agents.sentry_agent import SentryAgent
 
 load_dotenv()
@@ -223,7 +227,7 @@ async def sentry_webhook(request: Request):
     dedup_key = None
     dedup_redis = None
     if issue_id:
-        dedup_redis = redis_lib.from_url(os.getenv("REDIS_URL"))
+        dedup_redis = get_redis_connection()
         dedup_key = f"codeguard:sentry:processed:{issue_id}"
         lock_acquired = dedup_redis.set(dedup_key, "1", ex=86400, nx=True)
         if not lock_acquired:
