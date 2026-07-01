@@ -19,7 +19,15 @@ def get_queue(name: str = "codeguard") -> Queue:
     return Queue(name, connection=conn)
 
 
-def process_github_review(owner: str, repo: str, ref: str, branch: str, changed_files: list[str]):
+def process_github_review(
+    owner: str,
+    repo: str,
+    ref: str,
+    branch: str,
+    changed_files: list[str],
+    pr_number: int | None = None,
+    head_owner: str | None = None,
+):
     """
     Job function yang dijalankan oleh worker.
     Dipanggil dari queue — bukan dari webhook langsung.
@@ -44,7 +52,9 @@ def process_github_review(owner: str, repo: str, ref: str, branch: str, changed_
 
     # Output → post ke GitHub
     github = GitHubClient(owner, repo)
-    pr_number = github.get_open_pr_for_branch(branch) if branch else None
+    pr_number = pr_number or (
+        github.get_open_pr_for_branch(branch, head_owner=head_owner) if branch else None
+    )
 
     if pr_number:
         body = format_pr_comment(result)
@@ -82,8 +92,11 @@ def process_sentry_job(
         "line": error_line,
     }
 
+    github = GitHubClient(owner, repo)
+    default_branch = github.get_default_branch()
+
     # Context Builder — fetch file dari stack trace, bukan dari PR diff
-    cb = ContextBuilder(owner, repo, ref="HEAD")
+    cb = ContextBuilder(owner, repo, ref=default_branch)
     context = cb.build(related_file_paths)
 
     if not context["changed_files"]:
@@ -93,8 +106,6 @@ def process_sentry_job(
     # Orchestration → LLM (structured, dengan schema validation)
     orchestrator = Orchestrator()
     analysis = orchestrator.fix_bug(context, error)
-
-    github = GitHubClient(owner, repo)
 
     if analysis is None:
         # Semua provider gagal (token habis, validasi schema gagal, atau

@@ -122,9 +122,23 @@ class TestGetOpenPrForBranch:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = [{"number": 42}]
-        with patch("httpx.get", return_value=mock_resp):
+        with patch("httpx.get", return_value=mock_resp) as mock_get:
             result = client.get_open_pr_for_branch("feature/test")
         assert result == 42
+        assert mock_get.call_args.kwargs["params"] == {
+            "state": "open",
+            "head": "ariefeko:feature/test",
+        }
+
+    def test_uses_head_owner_for_fork_branch_lookup(self, client):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = [{"number": 7}]
+        with patch("httpx.get", return_value=mock_resp) as mock_get:
+            result = client.get_open_pr_for_branch("feature/test", head_owner="contributor")
+
+        assert result == 7
+        assert mock_get.call_args.kwargs["params"]["head"] == "contributor:feature/test"
 
     def test_returns_none_when_no_pr(self, client):
         mock_resp = MagicMock()
@@ -154,3 +168,32 @@ class TestGetOpenPrForBranch:
         with patch("httpx.get", side_effect=Exception("Network error")):
             result = client.get_open_pr_for_branch("feature/test")
         assert result is None
+
+
+class TestGetDefaultBranch:
+    def test_env_default_branch_overrides_repo_metadata(self, client, monkeypatch):
+        monkeypatch.setenv("CODEGUARD_DEFAULT_BRANCH", "develop")
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"default_branch": "main"}
+
+        with patch("httpx.get") as mock_get:
+            assert client.get_default_branch() == "develop"
+            mock_get.assert_not_called()
+
+    def test_returns_default_branch_from_repo_metadata(self, client, monkeypatch):
+        monkeypatch.delenv("CODEGUARD_DEFAULT_BRANCH", raising=False)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"default_branch": "main"}
+
+        with patch("httpx.get", return_value=mock_resp):
+            assert client.get_default_branch() == "main"
+
+    def test_falls_back_to_env_default_branch(self, client, monkeypatch):
+        monkeypatch.delenv("CODEGUARD_DEFAULT_BRANCH", raising=False)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 500
+
+        with patch("httpx.get", return_value=mock_resp):
+            assert client.get_default_branch() == "main"
