@@ -13,3 +13,7 @@ ai-results/
 
 Modelfile
 Thinkpad-T14.md
+
+.coverage
+Documentation/
+docs/

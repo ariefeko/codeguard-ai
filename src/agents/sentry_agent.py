@@ -70,24 +70,41 @@ class SentryAgent:
         """
         data = payload.get("data", {})
 
-        # Jalur utama yang TERKONFIRMASI: data.issue.data.*
+        # issue_id dari Sentry -- dipakai sebagai deduplication key di Redis.
+        # Untuk resource=issue: ada di data.issue.id
+        # Untuk resource=event_alert: ada di data.issue_id atau data.issue.id
         issue = data.get("issue", {})
+        issue_id = (
+            str(issue.get("id", ""))
+            or str(data.get("issue_id", ""))
+            or str(data.get("event", {}).get("issue_id", ""))
+            or ""
+        )
+
+        # Jalur utama yang TERKONFIRMASI: data.issue.data.*
         issue_data = issue.get("data", issue) if isinstance(issue, dict) else {}
 
         if issue_data.get("metadata") or issue_data.get("exception"):
-            return self._parse_from_issue_data(issue_data)
+            result = self._parse_from_issue_data(issue_data)
+            if result:
+                result["issue_id"] = issue_id
+            return result
 
-        # Jalur fallback 1: resource "error" langsung (Business/Enterprise, kemungkinan
-        # struktur lebih flat, belum pernah dikonfirmasi langsung)
+        # Jalur fallback 1: resource "error" langsung (Business/Enterprise)
         if "error" in data:
-            return self._parse_from_error_resource(data["error"])
+            result = self._parse_from_error_resource(data["error"])
+            if result:
+                result["issue_id"] = issue_id
+            return result
 
-        # Jalur fallback 2: data.event langsung (beberapa versi webhook alert rule)
+        # Jalur fallback 2: data.event langsung
         if "event" in data:
-            return self._parse_from_event_resource(data["event"])
+            result = self._parse_from_event_resource(data["event"])
+            if result:
+                result["issue_id"] = issue_id
+            return result
 
-        # Jalur fallback 3: ada "issue" tapi tanpa metadata/exception (state change,
-        # misal resolved/ignored -- tidak ada detail untuk dianalisis)
+        # Jalur fallback 3: state change tanpa detail exception
         if issue:
             print("[SentryAgent] Payload issue tanpa metadata/exception -- skip analysis")
             return None

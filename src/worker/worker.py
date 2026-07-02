@@ -9,9 +9,40 @@ from src.utils.formatters import format_pr_comment, format_bug_issue, format_bug
 
 load_dotenv()
 
+REDIS_URL_SCHEMES = ("redis://", "rediss://", "unix://")
+
+
+def get_redis_url() -> str:
+    for name in ("REDIS_URL", "REDIS_PRIVATE_URL", "REDIS_PUBLIC_URL"):
+        value = os.getenv(name)
+        if not value:
+            continue
+
+        value = value.strip()
+        if value.startswith(REDIS_URL_SCHEMES):
+            return value
+
+        raise ValueError(
+            f"{name} must start with one of {', '.join(REDIS_URL_SCHEMES)}. "
+            "Set it to the full Redis connection URL from Railway, not just host:port."
+        )
+
+    host = os.getenv("REDISHOST") or os.getenv("REDIS_HOST")
+    port = os.getenv("REDISPORT") or os.getenv("REDIS_PORT") or "6379"
+    password = os.getenv("REDISPASSWORD") or os.getenv("REDIS_PASSWORD")
+
+    if host:
+        auth = f":{password}@" if password else ""
+        return f"redis://{auth}{host}:{port}"
+
+    raise RuntimeError(
+        "Redis connection is not configured. Set REDIS_URL to a full URL like "
+        "redis://default:<password>@<host>:<port> or connect a Railway Redis service."
+    )
+
 
 def get_redis_connection():
-    return redis.from_url(os.getenv("REDIS_URL"))
+    return redis.from_url(get_redis_url())
 
 
 def get_queue(name: str = "codeguard") -> Queue:
@@ -19,7 +50,15 @@ def get_queue(name: str = "codeguard") -> Queue:
     return Queue(name, connection=conn)
 
 
-def process_github_review(owner: str, repo: str, ref: str, branch: str, changed_files: list[str]):
+def process_github_review(
+    owner: str,
+    repo: str,
+    ref: str,
+    branch: str,
+    changed_files: list[str],
+    pr_number: int | None = None,
+    head_owner: str | None = None,
+):
     """
     Job function yang dijalankan oleh worker.
     Dipanggil dari queue — bukan dari webhook langsung.
@@ -44,7 +83,9 @@ def process_github_review(owner: str, repo: str, ref: str, branch: str, changed_
 
     # Output → post ke GitHub
     github = GitHubClient(owner, repo)
-    pr_number = github.get_open_pr_for_branch(branch) if branch else None
+    pr_number = pr_number or (
+        github.get_open_pr_for_branch(branch, head_owner=head_owner) if branch else None
+    )
 
     if pr_number:
         body = format_pr_comment(result)
@@ -82,8 +123,11 @@ def process_sentry_job(
         "line": error_line,
     }
 
+    github = GitHubClient(owner, repo)
+    default_branch = github.get_default_branch()
+
     # Context Builder — fetch file dari stack trace, bukan dari PR diff
-    cb = ContextBuilder(owner, repo, ref="HEAD")
+    cb = ContextBuilder(owner, repo, ref=default_branch)
     context = cb.build(related_file_paths)
 
     if not context["changed_files"]:
@@ -93,8 +137,6 @@ def process_sentry_job(
     # Orchestration → LLM (structured, dengan schema validation)
     orchestrator = Orchestrator()
     analysis = orchestrator.fix_bug(context, error)
-
-    github = GitHubClient(owner, repo)
 
     if analysis is None:
         # Semua provider gagal (token habis, validasi schema gagal, atau

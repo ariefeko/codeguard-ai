@@ -3,7 +3,7 @@ import json
 import httpx
 from src.orchestration.prompts import build_code_review_prompt, build_bug_fix_prompt
 from src.orchestration.tavily_client import CodeGuardSearch
-from src.orchestration.schema import validate_llm_output, BugAnalysis
+from src.orchestration.schemas import validate_llm_output, BugAnalysis
 
 
 # Provider endpoints
@@ -168,6 +168,8 @@ class Orchestrator:
         if json_mode:
             payload["response_format"] = {"type": "json_object"}
 
+        # Provider URLs are hardcoded in PROVIDER_CHAIN and must remain trusted
+        # configuration. Do not source them from webhook/user-controlled input.
         try:
             response = httpx.post(
                 provider["url"],
@@ -184,11 +186,15 @@ class Orchestrator:
                     data = json.loads(text)
                     return data["choices"][0]["message"]["content"]
                 except Exception as e:
-                    print(f"[Orchestrator] JSON parse error: {e}")
-                    print(f"[Orchestrator] Raw response (500 chars): {response.text[:500]}")
+                    response_size = len(response.text.encode("utf-8", errors="ignore"))
+                    print(
+                        "[Orchestrator] Provider response parse failed: "
+                        f"{type(e).__name__}; status={response.status_code}; "
+                        f"bytes={response_size}"
+                    )
                     return None
             else:
-                print(f"[Orchestrator] HTTP {response.status_code}: {response.text[:200]}")
+                print(f"[Orchestrator] HTTP {response.status_code} from provider")
                 return None
 
         except Exception as e:
