@@ -1,9 +1,13 @@
 import os
-import json
 import httpx
 from src.orchestration.prompts import build_code_review_prompt, build_bug_fix_prompt
 from src.orchestration.tavily_client import CodeGuardSearch
-from src.orchestration.schemas import validate_llm_output, BugAnalysis
+from src.orchestration.schemas import (
+    BugAnalysis,
+    extract_content,
+    parse_llm_envelope,
+    validate_llm_output,
+)
 
 
 # Provider endpoints
@@ -180,11 +184,15 @@ class Orchestrator:
 
             if response.status_code == 200:
                 try:
-                    text = response.text.strip()
-                    if text.endswith("data: [DONE]"):
-                        text = text[:-len("data: [DONE]")].strip()
-                    data = json.loads(text)
-                    return data["choices"][0]["message"]["content"]
+                    data = parse_llm_envelope(response.text)
+                    if data is None:
+                        raise ValueError("invalid response envelope")
+
+                    content = extract_content(data)
+                    if content is None:
+                        raise ValueError("missing response content")
+
+                    return content
                 except Exception as e:
                     response_size = len(response.text.encode("utf-8", errors="ignore"))
                     print(

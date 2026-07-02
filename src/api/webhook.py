@@ -239,13 +239,13 @@ async def sentry_webhook(request: Request):
     # Resource selain error/issue/event_alert (misal "installation",
     # "comment") tidak relevan untuk bug analysis -- acknowledge saja
     if resource not in ("error", "issue", "event_alert"):
-        print(f"[webhook] Resource '{resource}' tidak relevan — diabaikan")
-        return {"status": "ignored", "reason": f"resource '{resource}' not handled"}
+        print(f"[webhook] Resource '{resource}' tidak relevan — dilewati")
+        return {"status": "skipped", "reason": f"resource '{resource}' not handled"}
 
     error = agent.parse_error(payload)
     if error is None:
-        print("[webhook] Tidak ada error context yang bisa diekstrak — diabaikan")
-        return {"status": "ignored", "reason": "no parseable error data"}
+        print("[webhook] Tidak ada error context yang bisa diekstrak — dilewati")
+        return {"status": "skipped", "reason": "no parseable error data"}
 
     # Owner/repo Sentry TIDAK tahu langsung -- ini bukan event GitHub.
     # Perlu konfigurasi mapping project Sentry -> repo GitHub.
