@@ -1,5 +1,7 @@
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from src.worker import worker
 
 
@@ -62,6 +64,16 @@ def test_get_redis_connection_sets_socket_timeouts(monkeypatch):
     )
 
 
+def test_has_blocking_findings_detects_high_and_critical():
+    assert worker.has_blocking_findings("HIGH - SQL injection risk") is True
+    assert worker.has_blocking_findings("Critical severity issue found") is True
+
+
+def test_has_blocking_findings_ignores_non_blocking_summary():
+    assert worker.has_blocking_findings("No high severity issues found") is False
+    assert worker.has_blocking_findings("LOW - typo") is False
+
+
 def test_github_review_uses_pr_number_from_webhook():
     context_builder = MagicMock()
     context_builder.build.return_value = {
@@ -89,6 +101,83 @@ def test_github_review_uses_pr_number_from_webhook():
     github.get_open_pr_for_branch.assert_not_called()
     github.post_pr_comment.assert_called_once()
     assert github.post_pr_comment.call_args.args[0] == 42
+    assert github.set_commit_status.call_args_list[0].args[:2] == ("abc123", "pending")
+    assert github.set_commit_status.call_args_list[1].args[:2] == ("abc123", "success")
+
+
+def test_github_review_sets_failure_status_for_blocking_findings():
+    context_builder = MagicMock()
+    context_builder.build.return_value = {
+        "changed_files": {"src/app.py": "print('ok')"},
+        "related_files": {},
+    }
+    orchestrator = MagicMock()
+    orchestrator.review_code.return_value = "HIGH - SQL injection risk"
+    github = MagicMock()
+
+    with patch("src.worker.worker.ContextBuilder", return_value=context_builder), patch(
+        "src.worker.worker.Orchestrator",
+        return_value=orchestrator,
+    ), patch("src.worker.worker.GitHubClient", return_value=github):
+        worker.process_github_review(
+            "ariefeko",
+            "tagihin",
+            "abc123",
+            "feature/test",
+            ["src/app.py"],
+            pr_number=42,
+        )
+
+    assert github.set_commit_status.call_args_list[0].args[:2] == ("abc123", "pending")
+    assert github.set_commit_status.call_args_list[1].args[:2] == ("abc123", "failure")
+
+
+def test_github_review_sets_success_status_when_no_analyzable_files():
+    context_builder = MagicMock()
+    context_builder.build.return_value = {
+        "changed_files": {},
+        "related_files": {},
+    }
+    github = MagicMock()
+
+    with patch("src.worker.worker.ContextBuilder", return_value=context_builder), patch(
+        "src.worker.worker.GitHubClient",
+        return_value=github,
+    ):
+        worker.process_github_review(
+            "ariefeko",
+            "tagihin",
+            "abc123",
+            "feature/test",
+            ["README.md"],
+            pr_number=42,
+        )
+
+    assert github.set_commit_status.call_args_list[0].args[:2] == ("abc123", "pending")
+    assert github.set_commit_status.call_args_list[1].args[:2] == ("abc123", "success")
+    github.post_pr_comment.assert_not_called()
+
+
+def test_github_review_sets_error_status_when_worker_fails():
+    context_builder = MagicMock()
+    context_builder.build.side_effect = RuntimeError("boom")
+    github = MagicMock()
+
+    with patch("src.worker.worker.ContextBuilder", return_value=context_builder), patch(
+        "src.worker.worker.GitHubClient",
+        return_value=github,
+    ), pytest.raises(RuntimeError):
+        worker.process_github_review(
+            "ariefeko",
+            "tagihin",
+            "abc123",
+            "feature/test",
+            ["src/app.py"],
+            pr_number=42,
+        )
+
+    assert github.set_commit_status.call_args_list[0].args[:2] == ("abc123", "pending")
+    assert github.set_commit_status.call_args_list[1].args[:2] == ("abc123", "error")
 
 
 def test_github_review_falls_back_to_branch_lookup_with_head_owner():

@@ -21,6 +21,42 @@ class GitHubClient:
         }
         self.base_url = f"https://api.github.com/repos/{owner}/{repo}"
 
+    def set_commit_status(
+        self,
+        sha: str,
+        state: str,
+        description: str,
+        context: str = "codeguard-ai",
+        target_url: str | None = None,
+    ) -> bool:
+        """
+        Set GitHub commit status so branch protection can block PR merges.
+        state must be one of: error, failure, pending, success.
+        """
+        if state not in {"error", "failure", "pending", "success"}:
+            raise ValueError("Invalid commit status state")
+
+        url = f"{self.base_url}/statuses/{sha}"
+        payload = {
+            "state": state,
+            "description": description[:140],
+            "context": context,
+        }
+        if target_url:
+            payload["target_url"] = target_url
+
+        try:
+            response = httpx.post(url, headers=self.headers, json=payload, timeout=10)
+            if response.status_code == 201:
+                print(f"[GitHubClient] Commit status set: {context}={state}")
+                return True
+
+            print(f"[GitHubClient] Failed to set commit status: HTTP {response.status_code}")
+            return False
+        except Exception as e:
+            print(f"[GitHubClient] Error setting commit status: {e}")
+            return False
+
     def get_default_branch(self) -> str:
         """Ambil branch target untuk Sentry context, env override lebih dulu."""
         env_branch = os.getenv("CODEGUARD_DEFAULT_BRANCH")

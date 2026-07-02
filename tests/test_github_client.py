@@ -40,6 +40,51 @@ def test_rejects_invalid_repository_name_format(monkeypatch):
         GitHubClient("ariefeko", "bad repo")
 
 
+class TestSetCommitStatus:
+    def test_success_posts_commit_status(self, client):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 201
+
+        with patch("httpx.post", return_value=mock_resp) as mock_post:
+            result = client.set_commit_status(
+                "abc123",
+                "failure",
+                "CodeGuard found blocking issues",
+                target_url="https://example.com/build",
+            )
+
+        assert result is True
+        assert mock_post.call_args.args[0].endswith("/statuses/abc123")
+        payload = mock_post.call_args.kwargs["json"]
+        assert payload == {
+            "state": "failure",
+            "description": "CodeGuard found blocking issues",
+            "context": "codeguard-ai",
+            "target_url": "https://example.com/build",
+        }
+
+    def test_truncates_long_description(self, client):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 201
+
+        with patch("httpx.post", return_value=mock_resp) as mock_post:
+            client.set_commit_status("abc123", "success", "x" * 200)
+
+        payload = mock_post.call_args.kwargs["json"]
+        assert len(payload["description"]) == 140
+
+    def test_rejects_invalid_state(self, client):
+        with pytest.raises(ValueError):
+            client.set_commit_status("abc123", "done", "invalid")
+
+    def test_http_error_returns_false(self, client):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 422
+
+        with patch("httpx.post", return_value=mock_resp):
+            assert client.set_commit_status("abc123", "success", "ok") is False
+
+
 # ============================================================
 # create_issue()
 # ============================================================

@@ -1,4 +1,5 @@
 import os
+import re
 import redis
 from rq import Worker, Queue
 from dotenv import load_dotenv
@@ -10,6 +11,12 @@ from src.utils.formatters import format_pr_comment, format_bug_issue, format_bug
 load_dotenv()
 
 REDIS_URL_SCHEMES = ("redis://", "rediss://", "unix://")
+CODEGUARD_STATUS_CONTEXT = "codeguard-ai"
+BLOCKING_SEVERITY_RE = re.compile(
+    r"^\s*(?:[-*]\s*)?(?:#+\s*)?(?:\d+\.\s*)?(critical|high)\b"
+    r"|\b(critical|high)\s+severity\b",
+    re.IGNORECASE,
+)
 
 
 def get_redis_url() -> str:
@@ -57,6 +64,25 @@ def get_queue(name: str = "codeguard") -> Queue:
     return Queue(name, connection=conn)
 
 
+def has_blocking_findings(review_result: str) -> bool:
+    """Return True when review text contains a blocking severity finding."""
+    for line in review_result.splitlines():
+        normalized = line.strip().lower()
+        if not normalized or normalized.startswith(("no high", "no critical")):
+            continue
+        if BLOCKING_SEVERITY_RE.search(line):
+            return True
+    return False
+
+
+def review_status_for_result(review_result: str) -> tuple[str, str]:
+    if review_result.startswith("Error:"):
+        return "error", "CodeGuard analysis failed"
+    if has_blocking_findings(review_result):
+        return "failure", "CodeGuard found blocking issues"
+    return "success", "CodeGuard found no blocking issues"
+
+
 def process_github_review(
     owner: str,
     repo: str,
@@ -72,35 +98,69 @@ def process_github_review(
     """
 
     print(f"[Worker] Processing review for {owner}/{repo} ref={ref}")
-
-    # Context Builder
-    cb = ContextBuilder(owner, repo, ref)
-    context = cb.build(changed_files)
-
-    if not context["changed_files"]:
-        print("[Worker] No analyzable files — skipping")
-        return
-
-    # Orchestration → LLM
-    orchestrator = Orchestrator()
-    result = orchestrator.review_code(context)
-
-    print("\n[Worker] === LLM REVIEW RESULT ===")
-    print(result)
-
-    # Output → post ke GitHub
     github = GitHubClient(owner, repo)
-    pr_number = pr_number or (
-        github.get_open_pr_for_branch(branch, head_owner=head_owner) if branch else None
+    status_target_url = os.getenv("CODEGUARD_STATUS_TARGET_URL")
+    github.set_commit_status(
+        ref,
+        "pending",
+        "CodeGuard review is running",
+        context=CODEGUARD_STATUS_CONTEXT,
+        target_url=status_target_url,
     )
 
-    if pr_number:
-        body = format_pr_comment(result)
-        github.post_pr_comment(pr_number, body)
-    else:
-        title = f"🤖 CodeGuard AI Review — {branch or ref[:7]}"
-        body = format_pr_comment(result)
-        github.create_issue(title, body)
+    try:
+        # Context Builder
+        cb = ContextBuilder(owner, repo, ref)
+        context = cb.build(changed_files)
+
+        if not context["changed_files"]:
+            print("[Worker] No analyzable files — skipping")
+            github.set_commit_status(
+                ref,
+                "success",
+                "CodeGuard found no analyzable files",
+                context=CODEGUARD_STATUS_CONTEXT,
+                target_url=status_target_url,
+            )
+            return
+
+        # Orchestration → LLM
+        orchestrator = Orchestrator()
+        result = orchestrator.review_code(context)
+
+        print("\n[Worker] === LLM REVIEW RESULT ===")
+        print(result)
+
+        state, description = review_status_for_result(result)
+        github.set_commit_status(
+            ref,
+            state,
+            description,
+            context=CODEGUARD_STATUS_CONTEXT,
+            target_url=status_target_url,
+        )
+
+        # Output → post ke GitHub
+        pr_number = pr_number or (
+            github.get_open_pr_for_branch(branch, head_owner=head_owner) if branch else None
+        )
+
+        if pr_number:
+            body = format_pr_comment(result)
+            github.post_pr_comment(pr_number, body)
+        else:
+            title = f"🤖 CodeGuard AI Review — {branch or ref[:7]}"
+            body = format_pr_comment(result)
+            github.create_issue(title, body)
+    except Exception:
+        github.set_commit_status(
+            ref,
+            "error",
+            "CodeGuard worker failed",
+            context=CODEGUARD_STATUS_CONTEXT,
+            target_url=status_target_url,
+        )
+        raise
 
 
 def process_sentry_job(
