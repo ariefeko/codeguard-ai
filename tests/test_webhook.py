@@ -41,6 +41,48 @@ class TestGithubSignature:
         assert response.status_code == 401
         assert response.body == b'{"status":"rejected"}'
 
+    @pytest.mark.asyncio
+    async def test_github_webhook_rejects_malformed_json(self, monkeypatch):
+        monkeypatch.setenv("GITHUB_WEBHOOK_SECRET", "github-secret")
+        body = b"{not-json"
+        signature = "sha256=" + hmac.new(
+            b"github-secret",
+            body,
+            hashlib.sha256,
+        ).hexdigest()
+        request = MagicMock()
+        request.body = AsyncMock(return_value=body)
+        request.headers.get.side_effect = lambda key, default=None: {
+            "X-Hub-Signature-256": signature,
+            "X-GitHub-Event": "push",
+        }.get(key, default)
+
+        response = await webhook.github_webhook(request)
+
+        assert response.status_code == 400
+        assert response.body == b'{"status":"rejected"}'
+
+    @pytest.mark.asyncio
+    async def test_github_webhook_rejects_missing_repository(self, monkeypatch):
+        monkeypatch.setenv("GITHUB_WEBHOOK_SECRET", "github-secret")
+        body = b'{"zen":"missing repo"}'
+        signature = "sha256=" + hmac.new(
+            b"github-secret",
+            body,
+            hashlib.sha256,
+        ).hexdigest()
+        request = MagicMock()
+        request.body = AsyncMock(return_value=body)
+        request.headers.get.side_effect = lambda key, default=None: {
+            "X-Hub-Signature-256": signature,
+            "X-GitHub-Event": "push",
+        }.get(key, default)
+
+        response = await webhook.github_webhook(request)
+
+        assert response.status_code == 400
+        assert response.body == b'{"status":"rejected"}'
+
 
 class TestRepoPolicy:
     def test_allows_configured_repo(self, monkeypatch):
@@ -110,6 +152,21 @@ class TestExtractChangedFiles:
         assert webhook.extract_changed_files("pull_request", payload) == []
 
 
+class TestExtractRepoInfo:
+    def test_extracts_repo_owner_and_name(self):
+        payload = {
+            "repository": {
+                "owner": {"login": "ariefeko"},
+                "name": "tagihin",
+            }
+        }
+
+        assert webhook.extract_repo_info(payload) == ("ariefeko", "tagihin")
+
+    def test_returns_none_for_missing_repo_fields(self):
+        assert webhook.extract_repo_info({"repository": {"owner": {}}}) is None
+
+
 class TestExtractHeadOwner:
     def test_extracts_pull_request_head_owner(self):
         payload = {
@@ -144,7 +201,21 @@ class TestSentryDedup:
         assert response.body == b'{"status":"rejected"}'
 
     @pytest.mark.asyncio
-    async def test_deletes_dedup_key_when_enqueue_fails(self, monkeypatch):
+    async def test_sentry_webhook_rejects_malformed_json(self):
+        request = MagicMock()
+        request.body = AsyncMock(return_value=b"{not-json")
+        request.headers.get.return_value = "valid"
+
+        with patch("src.api.webhook.SentryAgent") as agent_cls:
+            agent_cls.return_value.verify_signature.return_value = True
+
+            response = await webhook.sentry_webhook(request)
+
+        assert response.status_code == 400
+        assert response.body == b'{"status":"rejected"}'
+
+    @pytest.mark.asyncio
+    async def test_leaves_pending_dedup_key_when_enqueue_fails(self, monkeypatch):
         monkeypatch.setenv("CODEGUARD_DEFAULT_OWNER", "ariefeko")
         monkeypatch.setenv("CODEGUARD_DEFAULT_REPO", "tagihin")
 
@@ -180,4 +251,63 @@ class TestSentryDedup:
             with pytest.raises(RuntimeError):
                 await webhook.sentry_webhook(request)
 
-        redis_client.delete.assert_called_once_with("codeguard:sentry:processed:issue-1")
+        redis_client.set.assert_called_once_with(
+            "codeguard:sentry:processed:issue-1",
+            "pending",
+            ex=webhook.SENTRY_DEDUP_PENDING_TTL_SECONDS,
+            nx=True,
+        )
+        redis_client.delete.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_promotes_dedup_key_after_enqueue_success(self, monkeypatch):
+        monkeypatch.setenv("CODEGUARD_DEFAULT_OWNER", "ariefeko")
+        monkeypatch.setenv("CODEGUARD_DEFAULT_REPO", "tagihin")
+
+        redis_client = MagicMock()
+        redis_client.set.return_value = True
+        queue = MagicMock()
+        queue.enqueue.return_value = MagicMock(id="job-1")
+
+        request = MagicMock()
+        request.body = AsyncMock(return_value=b"{}")
+        request.headers.get.side_effect = lambda key, default=None: {
+            "Sentry-Hook-Signature": "valid",
+            "Sentry-Hook-Resource": "issue",
+        }.get(key, default)
+
+        parsed_error = {
+            "type": "RuntimeError",
+            "message": "boom",
+            "file": "src/app.py",
+            "line": 1,
+            "related_file_paths": ["src/app.py"],
+            "issue_id": "issue-1",
+        }
+
+        with patch("src.api.webhook.SentryAgent") as agent_cls, patch(
+            "src.api.webhook.get_redis_connection",
+            return_value=redis_client,
+        ), patch("src.api.webhook.get_queue", return_value=queue):
+            agent = agent_cls.return_value
+            agent.verify_signature.return_value = True
+            agent.parse_error.return_value = parsed_error
+
+            response = await webhook.sentry_webhook(request)
+
+        assert response.status_code == 202
+        assert redis_client.set.call_args_list[0].args == (
+            "codeguard:sentry:processed:issue-1",
+            "pending",
+        )
+        assert redis_client.set.call_args_list[0].kwargs == {
+            "ex": webhook.SENTRY_DEDUP_PENDING_TTL_SECONDS,
+            "nx": True,
+        }
+        assert redis_client.set.call_args_list[1].args == (
+            "codeguard:sentry:processed:issue-1",
+            "queued:job-1",
+        )
+        assert redis_client.set.call_args_list[1].kwargs == {
+            "ex": webhook.SENTRY_DEDUP_TTL_SECONDS,
+        }

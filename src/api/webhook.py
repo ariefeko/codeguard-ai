@@ -19,6 +19,11 @@ load_dotenv()
 
 router = APIRouter()
 
+SENTRY_DEDUP_TTL_SECONDS = 86400
+SENTRY_DEDUP_PENDING_TTL_SECONDS = int(
+    os.getenv("SENTRY_DEDUP_PENDING_TTL_SECONDS", "60")
+)
+
 
 @router.post("/webhook/github")
 async def github_webhook(request: Request):
@@ -31,14 +36,22 @@ async def github_webhook(request: Request):
             content={"status": "rejected"},
         )
 
-    payload = json.loads(raw_body)
+    try:
+        payload = json.loads(raw_body)
+    except json.JSONDecodeError:
+        print("[webhook] GitHub payload JSON tidak valid")
+        return JSONResponse(status_code=400, content={"status": "rejected"})
+
     event_type = request.headers.get("X-GitHub-Event", "unknown")
 
     print(f"\n=== GITHUB WEBHOOK: {event_type} ===")
 
-    # Ambil repo info dari payload
-    owner = payload["repository"]["owner"]["login"]
-    repo = payload["repository"]["name"]
+    repo_info = extract_repo_info(payload)
+    if repo_info is None:
+        print("[webhook] GitHub payload tidak memiliki repository owner/name")
+        return JSONResponse(status_code=400, content={"status": "rejected"})
+
+    owner, repo = repo_info
     if not is_repo_allowed(owner, repo):
         print(f"[webhook] GitHub repo tidak diizinkan: {owner}/{repo}")
         return JSONResponse(
@@ -78,6 +91,23 @@ async def github_webhook(request: Request):
             "message": "Review queued — PR comment will appear shortly"
         }
     )
+
+
+def extract_repo_info(payload: dict) -> tuple[str, str] | None:
+    repository = payload.get("repository")
+    if not isinstance(repository, dict):
+        return None
+
+    owner_data = repository.get("owner")
+    if not isinstance(owner_data, dict):
+        return None
+
+    owner = owner_data.get("login")
+    repo = repository.get("name")
+    if not owner or not repo:
+        return None
+
+    return owner, repo
 
 
 def verify_github_signature(raw_body: bytes, signature_header: str | None) -> bool:
@@ -194,7 +224,12 @@ async def sentry_webhook(request: Request):
             content={"status": "rejected"},
         )
 
-    payload = json.loads(raw_body)
+    try:
+        payload = json.loads(raw_body)
+    except json.JSONDecodeError:
+        print("[webhook] Sentry payload JSON tidak valid")
+        return JSONResponse(status_code=400, content={"status": "rejected"})
+
     resource = request.headers.get("Sentry-Hook-Resource", "unknown")
     action = payload.get("action", "unknown")
 
@@ -227,16 +262,23 @@ async def sentry_webhook(request: Request):
     print(f"Error: {error['type']} — {error['message']}")
     print(f"File: {error['file']}:{error['line']}")
 
-    # Deduplication via Redis -- satu Sentry issue_id cukup diproses SEKALI
-    # dalam 24 jam, terlepas berapa kali Sentry kirim webhook untuk issue yang
-    # sama (bisa kirim lewat event_alert DAN issue action=created sekaligus).
+    # Deduplication via Redis -- gunakan pending lock pendek sebelum enqueue,
+    # lalu promote ke queued lock 24 jam hanya setelah enqueue sukses. Saat
+    # enqueue gagal, jangan delete key: delete bisa balapan dengan request lain
+    # yang sudah melihat lock dan mengabaikan event. Pending TTL membuat retry
+    # berikutnya bisa masuk setelah window pendek berakhir.
     issue_id = error.get("issue_id", "")
     dedup_key = None
     dedup_redis = None
     if issue_id:
         dedup_redis = get_redis_connection()
         dedup_key = f"codeguard:sentry:processed:{issue_id}"
-        lock_acquired = dedup_redis.set(dedup_key, "1", ex=86400, nx=True)
+        lock_acquired = dedup_redis.set(
+            dedup_key,
+            "pending",
+            ex=SENTRY_DEDUP_PENDING_TTL_SECONDS,
+            nx=True,
+        )
         if not lock_acquired:
             print(f"[webhook] Issue {issue_id} sudah diproses sebelumnya — diabaikan")
             return JSONResponse(
@@ -246,19 +288,17 @@ async def sentry_webhook(request: Request):
     else:
         print("[webhook] Tidak ada issue_id -- deduplication dilewati")
 
-    try:
-        queue = get_queue()
-        job = queue.enqueue(
-            process_sentry_job,
-            owner, repo,
-            error["type"], error["message"], error["file"], error["line"],
-            error["related_file_paths"],
-            job_timeout=120,
-        )
-    except Exception:
-        if dedup_key and dedup_redis:
-            dedup_redis.delete(dedup_key)
-        raise
+    queue = get_queue()
+    job = queue.enqueue(
+        process_sentry_job,
+        owner, repo,
+        error["type"], error["message"], error["file"], error["line"],
+        error["related_file_paths"],
+        job_timeout=120,
+    )
+
+    if dedup_key and dedup_redis:
+        dedup_redis.set(dedup_key, f"queued:{job.id}", ex=SENTRY_DEDUP_TTL_SECONDS)
 
     print(f"[webhook] Sentry job enqueued: {job.id}")
 
