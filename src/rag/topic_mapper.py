@@ -342,4 +342,5 @@ class TopicMapper:
         return tuple(result)
 
     def _has_any(self, text: str, needles: tuple[str, ...]) -> bool:
+        """Return True when text contains any search string from needles."""
         return any(needle in text for needle in needles)
