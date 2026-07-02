@@ -32,6 +32,14 @@ def test_rejects_unallowed_repository(monkeypatch):
         GitHubClient("attacker", "repo")
 
 
+def test_rejects_invalid_repository_name_format(monkeypatch):
+    monkeypatch.setenv("GITHUB_PAT_TOKEN", "fake_token")
+    monkeypatch.setenv("CODEGUARD_ALLOWED_REPOS", "ariefeko/tagihin")
+
+    with pytest.raises(ValueError):
+        GitHubClient("ariefeko", "bad repo")
+
+
 # ============================================================
 # create_issue()
 # ============================================================

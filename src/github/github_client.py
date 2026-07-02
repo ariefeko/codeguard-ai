@@ -1,10 +1,13 @@
 import os
 import httpx
-from src.github.repo_policy import is_repo_allowed
+from src.github.repo_policy import is_repo_allowed, is_valid_repo_name
 
 
 class GitHubClient:
     def __init__(self, owner: str, repo: str):
+        if not is_valid_repo_name(owner, repo):
+            raise ValueError("Invalid owner or repo name format")
+
         if not is_repo_allowed(owner, repo):
             raise PermissionError(f"Repository is not allowed: {owner}/{repo}")
 

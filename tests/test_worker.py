@@ -46,6 +46,22 @@ def test_get_redis_url_rejects_url_without_scheme(monkeypatch):
         raise AssertionError("Expected ValueError")
 
 
+def test_get_redis_connection_sets_socket_timeouts(monkeypatch):
+    clear_redis_env(monkeypatch)
+    monkeypatch.delenv("REDIS_SOCKET_CONNECT_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.delenv("REDIS_SOCKET_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.setenv("REDIS_URL", "redis://default:secret@redis.railway.internal:6379")
+
+    with patch("src.worker.worker.redis.from_url") as from_url:
+        worker.get_redis_connection()
+
+    from_url.assert_called_once_with(
+        "redis://default:secret@redis.railway.internal:6379",
+        socket_connect_timeout=5.0,
+        socket_timeout=5.0,
+    )
+
+
 def test_github_review_uses_pr_number_from_webhook():
     context_builder = MagicMock()
     context_builder.build.return_value = {

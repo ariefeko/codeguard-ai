@@ -22,6 +22,10 @@ Referensi: https://docs.sentry.io/organization/integrations/integration-platform
 import hashlib
 import hmac
 import os
+import re
+
+
+SENTRY_SIGNATURE_RE = re.compile(r"^[A-Fa-f0-9]{64}$")
 
 
 class SentryAgent:
@@ -41,6 +45,10 @@ class SentryAgent:
 
         if not signature_header:
             print("[SentryAgent] Tidak ada Sentry-Hook-Signature header")
+            return False
+
+        if not SENTRY_SIGNATURE_RE.fullmatch(signature_header):
+            print("[SentryAgent] Format Sentry-Hook-Signature tidak valid")
             return False
 
         computed = hmac.new(

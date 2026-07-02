@@ -32,6 +32,7 @@ def get_redis_url() -> str:
     password = os.getenv("REDISPASSWORD") or os.getenv("REDIS_PASSWORD")
 
     if host:
+        # The constructed URL may contain the Redis password; never log it.
         auth = f":{password}@" if password else ""
         return f"redis://{auth}{host}:{port}"
 
@@ -42,7 +43,13 @@ def get_redis_url() -> str:
 
 
 def get_redis_connection():
-    return redis.from_url(get_redis_url())
+    return redis.from_url(
+        get_redis_url(),
+        socket_connect_timeout=float(
+            os.getenv("REDIS_SOCKET_CONNECT_TIMEOUT_SECONDS", "5")
+        ),
+        socket_timeout=float(os.getenv("REDIS_SOCKET_TIMEOUT_SECONDS", "5")),
+    )
 
 
 def get_queue(name: str = "codeguard") -> Queue:

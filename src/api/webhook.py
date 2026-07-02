@@ -20,6 +20,7 @@ load_dotenv()
 router = APIRouter()
 
 SENTRY_DEDUP_TTL_SECONDS = 86400
+# Retry window if enqueue fails after the pending dedup key is acquired.
 SENTRY_DEDUP_PENDING_TTL_SECONDS = int(
     os.getenv("SENTRY_DEDUP_PENDING_TTL_SECONDS", "60")
 )

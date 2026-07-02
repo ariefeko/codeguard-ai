@@ -21,6 +21,11 @@ class TestVerifySignature:
 
         assert SentryAgent().verify_signature(b"payload", "wrong") is False
 
+    def test_rejects_malformed_signature_header(self, monkeypatch):
+        monkeypatch.setenv("SENTRY_CLIENT_SECRET", "test-secret")
+
+        assert SentryAgent().verify_signature(b"payload", "not-a-hex-digest") is False
+
     def test_rejects_missing_signature_header(self, monkeypatch):
         monkeypatch.setenv("SENTRY_CLIENT_SECRET", "test-secret")
 
