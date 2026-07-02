@@ -1,9 +1,13 @@
 import os
 import httpx
+from src.github.repo_policy import is_repo_allowed
 
 
 class GitHubClient:
     def __init__(self, owner: str, repo: str):
+        if not is_repo_allowed(owner, repo):
+            raise PermissionError(f"Repository is not allowed: {owner}/{repo}")
+
         self.owner = owner
         self.repo = repo
         self.token = os.getenv("GITHUB_PAT_TOKEN")

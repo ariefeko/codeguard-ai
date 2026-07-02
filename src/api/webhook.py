@@ -13,6 +13,7 @@ from src.worker.worker import (
     process_sentry_job,
 )
 from src.agents.sentry_agent import SentryAgent
+from src.github.repo_policy import is_repo_allowed
 
 load_dotenv()
 
@@ -27,7 +28,7 @@ async def github_webhook(request: Request):
         print("[webhook] GitHub signature verification GAGAL — request ditolak")
         return JSONResponse(
             status_code=401,
-            content={"status": "rejected", "reason": "invalid signature"},
+            content={"status": "rejected"},
         )
 
     payload = json.loads(raw_body)
@@ -38,6 +39,12 @@ async def github_webhook(request: Request):
     # Ambil repo info dari payload
     owner = payload["repository"]["owner"]["login"]
     repo = payload["repository"]["name"]
+    if not is_repo_allowed(owner, repo):
+        print(f"[webhook] GitHub repo tidak diizinkan: {owner}/{repo}")
+        return JSONResponse(
+            status_code=403,
+            content={"status": "rejected"},
+        )
 
     changed_files = extract_changed_files(event_type, payload)
 
@@ -184,7 +191,7 @@ async def sentry_webhook(request: Request):
         print("[webhook] Sentry signature verification GAGAL — request ditolak")
         return JSONResponse(
             status_code=401,
-            content={"status": "rejected", "reason": "invalid signature"},
+            content={"status": "rejected"},
         )
 
     payload = json.loads(raw_body)

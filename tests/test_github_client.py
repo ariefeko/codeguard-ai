@@ -14,8 +14,22 @@ from src.github.github_client import GitHubClient
 
 @pytest.fixture
 def client():
-    with patch.dict("os.environ", {"GITHUB_PAT_TOKEN": "fake_token"}):
+    with patch.dict(
+        "os.environ",
+        {
+            "GITHUB_PAT_TOKEN": "fake_token",
+            "CODEGUARD_ALLOWED_REPOS": "ariefeko/tagihin",
+        },
+    ):
         return GitHubClient("ariefeko", "tagihin")
+
+
+def test_rejects_unallowed_repository(monkeypatch):
+    monkeypatch.setenv("GITHUB_PAT_TOKEN", "fake_token")
+    monkeypatch.setenv("CODEGUARD_ALLOWED_REPOS", "ariefeko/tagihin")
+
+    with pytest.raises(PermissionError):
+        GitHubClient("attacker", "repo")
 
 
 # ============================================================

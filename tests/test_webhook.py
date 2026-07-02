@@ -29,6 +29,39 @@ class TestGithubSignature:
 
         assert webhook.verify_github_signature(b"{}", "sha256=wrong") is False
 
+    @pytest.mark.asyncio
+    async def test_github_webhook_rejects_with_generic_response(self, monkeypatch):
+        monkeypatch.setenv("GITHUB_WEBHOOK_SECRET", "github-secret")
+        request = MagicMock()
+        request.body = AsyncMock(return_value=b"{}")
+        request.headers.get.return_value = "sha256=wrong"
+
+        response = await webhook.github_webhook(request)
+
+        assert response.status_code == 401
+        assert response.body == b'{"status":"rejected"}'
+
+
+class TestRepoPolicy:
+    def test_allows_configured_repo(self, monkeypatch):
+        monkeypatch.setenv("CODEGUARD_ALLOWED_REPOS", "ariefeko/tagihin")
+
+        assert webhook.is_repo_allowed("ariefeko", "tagihin") is True
+
+    def test_allows_default_repo_mapping(self, monkeypatch):
+        monkeypatch.delenv("CODEGUARD_ALLOWED_REPOS", raising=False)
+        monkeypatch.setenv("CODEGUARD_DEFAULT_OWNER", "ariefeko")
+        monkeypatch.setenv("CODEGUARD_DEFAULT_REPO", "tagihin")
+
+        assert webhook.is_repo_allowed("ariefeko", "tagihin") is True
+
+    def test_rejects_unconfigured_repo(self, monkeypatch):
+        monkeypatch.setenv("CODEGUARD_ALLOWED_REPOS", "ariefeko/tagihin")
+        monkeypatch.delenv("CODEGUARD_DEFAULT_OWNER", raising=False)
+        monkeypatch.delenv("CODEGUARD_DEFAULT_REPO", raising=False)
+
+        assert webhook.is_repo_allowed("attacker", "repo") is False
+
 
 class TestExtractChangedFiles:
     def test_fetches_all_pr_file_pages(self, monkeypatch):
@@ -96,6 +129,20 @@ class TestExtractHeadOwner:
 
 
 class TestSentryDedup:
+    @pytest.mark.asyncio
+    async def test_sentry_webhook_rejects_with_generic_response(self):
+        request = MagicMock()
+        request.body = AsyncMock(return_value=b"{}")
+        request.headers.get.return_value = "invalid"
+
+        with patch("src.api.webhook.SentryAgent") as agent_cls:
+            agent_cls.return_value.verify_signature.return_value = False
+
+            response = await webhook.sentry_webhook(request)
+
+        assert response.status_code == 401
+        assert response.body == b'{"status":"rejected"}'
+
     @pytest.mark.asyncio
     async def test_deletes_dedup_key_when_enqueue_fails(self, monkeypatch):
         monkeypatch.setenv("CODEGUARD_DEFAULT_OWNER", "ariefeko")
