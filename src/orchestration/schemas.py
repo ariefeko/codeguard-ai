@@ -7,7 +7,7 @@ setelah tiap response LLM, terlepas dari provider mana yang jawab.
 """
 import json
 from typing import Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 
 class InferenceClaim(BaseModel):
@@ -75,5 +75,5 @@ def validate_llm_output(raw_text: str) -> BugAnalysis | None:
     try:
         data = json.loads(cleaned)
         return BugAnalysis(**data)
-    except (json.JSONDecodeError, Exception):
+    except (json.JSONDecodeError, ValidationError):
         return None
