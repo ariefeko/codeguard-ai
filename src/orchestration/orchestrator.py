@@ -2,6 +2,7 @@ import os
 import httpx
 from src.orchestration.prompts import build_code_review_prompt, build_bug_fix_prompt
 from src.orchestration.tavily_client import CodeGuardSearch
+from src.rag import RAGPipeline
 from src.orchestration.schemas import (
     BugAnalysis,
     extract_content,
@@ -49,6 +50,7 @@ MAX_TOKENS_STRUCTURED = MAX_TOKENS * 2
 class Orchestrator:
     def __init__(self):
         self.search = CodeGuardSearch()
+        self.rag = RAGPipeline()
 
     def review_code(self, context: dict) -> str:
         """Entry point untuk GitHub webhook — code review."""
@@ -63,13 +65,17 @@ class Orchestrator:
         valid sesuai BugAnalysis schema -> caller (worker.py) fallback
         ke manual GitHub Issue tanpa AI analysis.
         """
-        search_results = self._search_for_error(error)
+        search_results = self._search_for_error(error, context)
         prompt = build_bug_fix_prompt(context, error, search_results)
         return self._call_llm_structured(prompt)
 
     def _enrich_with_search(self, context: dict) -> dict:
-        """Tavily search berdasarkan file extension."""
+        """Curated RAG first, then Tavily fallback based on file extension."""
         results = {}
+        rag_context = self._format_rag_for_context(context)
+        if rag_context:
+            results["rag"] = rag_context
+            return results
 
         for file_path in context.get("changed_files", {}).keys():
             if file_path.endswith(".php"):
@@ -93,15 +99,36 @@ class Orchestrator:
 
         return {k: v for k, v in results.items() if v}
 
-    def _search_for_error(self, error: dict) -> dict:
-        """Tavily search untuk Sentry error context."""
+    def _search_for_error(self, error: dict, context: dict | None = None) -> dict:
+        """Curated RAG first, then Tavily fallback for Sentry error context."""
         results = {}
+        rag_context = self._format_rag_for_error(error, context or {})
+        if rag_context:
+            results["rag"] = rag_context
+            return results
+
         error_type = error.get("type", "")
         if error_type:
             results["error_info"] = self.search._search(
                 f"{error_type} fix solution best practice"
             )
         return {k: v for k, v in results.items() if v}
+
+    def _format_rag_for_context(self, context: dict) -> str:
+        try:
+            snippets = self.rag.retrieve_for_context(context)
+            return self.rag.format_prompt_snippets(snippets)
+        except Exception as exc:
+            print(f"[RAG] Review enrichment failed: {type(exc).__name__}")
+            return ""
+
+    def _format_rag_for_error(self, error: dict, context: dict) -> str:
+        try:
+            snippets = self.rag.retrieve_for_error(error, context)
+            return self.rag.format_prompt_snippets(snippets)
+        except Exception as exc:
+            print(f"[RAG] Error enrichment failed: {type(exc).__name__}")
+            return ""
 
     def _call_llm(self, prompt: str) -> str:
         """Kirim prompt ke provider dengan fallback chain. Dipakai review_code()."""

@@ -16,6 +16,10 @@ def orchestrator():
     """Hindari membuat Tavily client asli di unit test."""
     instance = Orchestrator.__new__(Orchestrator)
     instance.search = MagicMock()
+    instance.rag = MagicMock()
+    instance.rag.retrieve_for_context.return_value = []
+    instance.rag.retrieve_for_error.return_value = []
+    instance.rag.format_prompt_snippets.return_value = ""
     return instance
 
 
@@ -167,6 +171,39 @@ class TestEntryPoints:
 
 
 class TestSearchEnrichment:
+    def test_enriches_review_with_rag_and_skips_tavily(self, orchestrator):
+        snippets = [object()]
+        orchestrator.rag.retrieve_for_context.return_value = snippets
+        orchestrator.rag.format_prompt_snippets.return_value = "Relevant curated knowledge"
+        context = {
+            "changed_files": {"app/Service.php": "<?php"},
+            "related_files": {},
+        }
+
+        result = orchestrator._enrich_with_search(context)
+
+        assert result == {"rag": "Relevant curated knowledge"}
+        orchestrator.rag.retrieve_for_context.assert_called_once_with(context)
+        orchestrator.rag.format_prompt_snippets.assert_called_once_with(snippets)
+        orchestrator.search.search_best_practices.assert_not_called()
+        orchestrator.search.search_owasp.assert_not_called()
+
+    def test_falls_back_to_tavily_when_review_rag_fails(self, orchestrator):
+        orchestrator.rag.retrieve_for_context.side_effect = RuntimeError("qdrant down")
+        orchestrator.search.search_best_practices.return_value = "python ref"
+        orchestrator.search.search_owasp.return_value = "owasp ref"
+        context = {
+            "changed_files": {"src/app.py": "print('ok')"},
+            "related_files": {},
+        }
+
+        result = orchestrator._enrich_with_search(context)
+
+        assert result == {
+            "python_security": "python ref",
+            "owasp_top10": "owasp ref",
+        }
+
     def test_enriches_python_review_and_owasp_reference(self, orchestrator):
         orchestrator.search.search_best_practices.return_value = "python ref"
         orchestrator.search.search_owasp.return_value = "owasp ref"
@@ -230,6 +267,23 @@ class TestSearchEnrichment:
         orchestrator.search._search.assert_called_once_with(
             "RuntimeError fix solution best practice"
         )
+
+    def test_enriches_error_with_rag_and_skips_tavily(self, orchestrator):
+        snippets = [object()]
+        orchestrator.rag.retrieve_for_error.return_value = snippets
+        orchestrator.rag.format_prompt_snippets.return_value = "Relevant bug knowledge"
+        context = {
+            "changed_files": {"src/app.py": "raise RuntimeError()"},
+            "related_files": {},
+        }
+        error = {"type": "RuntimeError", "file": "src/app.py"}
+
+        result = orchestrator._search_for_error(error, context)
+
+        assert result == {"rag": "Relevant bug knowledge"}
+        orchestrator.rag.retrieve_for_error.assert_called_once_with(error, context)
+        orchestrator.rag.format_prompt_snippets.assert_called_once_with(snippets)
+        orchestrator.search._search.assert_not_called()
 
     def test_skips_error_search_without_type(self, orchestrator):
         assert orchestrator._search_for_error({}) == {}
