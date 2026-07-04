@@ -177,7 +177,11 @@ codeguard-ai/
 │   │   ├── orchestrator.py        # LLM orchestration + fallback chain
 │   │   └── prompts.py             # Prompt templates per analysis type
 │   ├── rag/
-│   │   └── __init__.py            # Placeholder — RAG pipeline (not yet implemented)
+│   │   ├── qdrant_client.py       # Read-only Qdrant runtime client
+│   │   ├── qdrant_smoke.py        # Qdrant Cloud smoke query command
+│   │   ├── rag_pipeline.py        # Optional curated RAG retrieval
+│   │   ├── topic_mapper.py        # Maps code/error context to RAG topics
+│   │   └── seeds/                 # Curated MVP knowledge seed
 │   ├── utils/
 │   │   └── __init__.py            # Placeholder
 │   └── config.py                  # Single source of truth: extensions, skip dirs
@@ -230,6 +234,30 @@ cp .env.example .env
 # LLM Providers (fallback chain)
 GITHUB_PAT_TOKEN = your-github-pat-token-here
 OPENROUTER_API_KEY = your-openrouter-api-key-here
+
+# Optional RAG / Qdrant Cloud
+QDRANT_URL = your-qdrant-cloud-url-here
+QDRANT_API_KEY = your-qdrant-api-key-here
+RAG_ENABLED = false
+RAG_MAX_RESULTS = 5
+RAG_MIN_CONFIDENCE = 0.65
+```
+
+### Qdrant Cloud Smoke Test
+
+```bash
+source .venv/bin/activate
+RAG_ENABLED=true python -m src.rag.qdrant_smoke
+```
+
+If the command reports that Qdrant is connected but no collections are indexed
+yet, the cloud wiring is valid and the next step is running the Phase 14.8
+indexer/sync.
+
+For a local Qdrant instance without an API key:
+
+```bash
+RAG_ENABLED=true python -m src.rag.qdrant_smoke --allow-missing-api-key
 ```
 
 ### Run Locally

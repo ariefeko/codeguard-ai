@@ -1,5 +1,6 @@
 import os
 from dataclasses import dataclass
+from time import perf_counter
 from typing import Any
 
 from src.rag.qdrant_client import QdrantDocument, QdrantRuntimeClient
@@ -31,11 +32,12 @@ class RAGPipeline:
         self.client = client or QdrantRuntimeClient()
         self.topic_mapper = topic_mapper or TopicMapper()
         self.enabled = enabled if enabled is not None else self._env_bool("RAG_ENABLED")
-        self.max_results = max_results or int(os.getenv("RAG_MAX_RESULTS", "5"))
+        self.max_results = max_results or self._env_int("RAG_MAX_RESULTS", 5)
+        self.last_query_error: str | None = None
         self.min_confidence = (
             min_confidence
             if min_confidence is not None
-            else float(os.getenv("RAG_MIN_CONFIDENCE", "0.65"))
+            else self._env_float("RAG_MIN_CONFIDENCE", 0.65)
         )
 
     def retrieve_for_context(self, context: dict) -> list[RAGSnippet]:
@@ -51,9 +53,17 @@ class RAGPipeline:
         return self.retrieve(selection)
 
     def retrieve(self, selection: TopicSelection) -> list[RAGSnippet]:
-        if not self.enabled or not self.client.is_configured:
+        self.last_query_error = None
+        if not self.enabled:
+            self._log_event("rag_query_skipped", selection, reason="disabled")
             return []
 
+        if not self.client.is_configured:
+            self._log_event("rag_query_skipped", selection, reason="not_configured")
+            return []
+
+        started_at = perf_counter()
+        self._log_event("rag_query_started", selection)
         try:
             documents = self.client.query_by_filter(
                 collections=selection.collections,
@@ -67,10 +77,27 @@ class RAGPipeline:
                 limit=self.max_results,
             )
         except Exception as exc:
-            print(f"[RAG] Qdrant query failed: {type(exc).__name__}")
+            latency_ms = int((perf_counter() - started_at) * 1000)
+            status_code = getattr(getattr(exc, "response", None), "status_code", None)
+            self.last_query_error = self._format_error(exc, status_code)
+            self._log_event(
+                "rag_query_failed",
+                selection,
+                error_type=type(exc).__name__,
+                status_code=status_code or "none",
+                latency_ms=latency_ms,
+            )
             return []
 
-        return [self._to_snippet(document) for document in documents][: self.max_results]
+        snippets = [self._to_snippet(document) for document in documents][: self.max_results]
+        latency_ms = int((perf_counter() - started_at) * 1000)
+        self._log_event(
+            "rag_query_succeeded",
+            selection,
+            rag_result_count=len(snippets),
+            latency_ms=latency_ms,
+        )
+        return snippets
 
     def format_prompt_snippets(self, snippets: list[RAGSnippet]) -> str:
         if not snippets:
@@ -106,8 +133,54 @@ class RAGPipeline:
     def _env_bool(self, name: str) -> bool:
         return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
+    def _env_int(self, name: str, default: int) -> int:
+        try:
+            value = int(os.getenv(name, str(default)))
+        except ValueError:
+            print(f"[RAG] event=rag_config_invalid name={name} using_default={default}")
+            return default
+        if value < 1:
+            print(f"[RAG] event=rag_config_invalid name={name} using_default={default}")
+            return default
+        return value
+
+    def _env_float(self, name: str, default: float) -> float:
+        try:
+            value = float(os.getenv(name, str(default)))
+        except ValueError:
+            print(f"[RAG] event=rag_config_invalid name={name} using_default={default}")
+            return default
+        if value < 0:
+            print(f"[RAG] event=rag_config_invalid name={name} using_default={default}")
+            return default
+        return value
+
     def _safe_float(self, value: Any) -> float:
         try:
             return float(value or 0)
         except (TypeError, ValueError):
             return 0.0
+
+    def _format_error(self, exc: Exception, status_code: int | None) -> str:
+        if status_code is None:
+            return type(exc).__name__
+        return f"{type(exc).__name__}(status_code={status_code})"
+
+    def _log_event(
+        self,
+        event: str,
+        selection: TopicSelection,
+        **fields: Any,
+    ) -> None:
+        base_fields = {
+            "event": event,
+            "source": selection.source,
+            "language": selection.language,
+            "framework": selection.framework,
+            "category": selection.category,
+            "topics": ",".join(selection.topics),
+            "collections": ",".join(selection.collections),
+        }
+        base_fields.update(fields)
+        payload = " ".join(f"{key}={value}" for key, value in base_fields.items())
+        print(f"[RAG] {payload}")

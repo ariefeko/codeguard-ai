@@ -21,13 +21,32 @@ class QdrantRuntimeClient:
         api_key: str | None = None,
         timeout: float = 10,
     ):
-        self.url = (url or os.getenv("QDRANT_URL", "")).rstrip("/")
+        configured_url = url if url is not None else os.getenv("QDRANT_URL", "")
+        self.url = configured_url.rstrip("/")
         self.api_key = api_key if api_key is not None else os.getenv("QDRANT_API_KEY")
         self.timeout = timeout
 
     @property
     def is_configured(self) -> bool:
         return bool(self.url)
+
+    def list_collections(self) -> tuple[str, ...]:
+        if not self.is_configured:
+            return ()
+
+        response = httpx.get(
+            f"{self.url}/collections",
+            headers=self._headers(),
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        result = response.json().get("result", {})
+        collections = result.get("collections", []) if isinstance(result, dict) else []
+        return tuple(
+            str(collection.get("name", ""))
+            for collection in collections
+            if isinstance(collection, dict) and collection.get("name")
+        )
 
     def query_by_filter(
         self,

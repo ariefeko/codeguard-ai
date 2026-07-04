@@ -232,6 +232,8 @@ Work:
   - `RAG_ENABLED=true`
   - `RAG_MAX_RESULTS`
   - `RAG_MIN_CONFIDENCE`
+- Run the read-only smoke command:
+  - `python -m src.rag.qdrant_smoke`
 - Verify worker can query Qdrant Cloud.
 - Run one end-to-end PR/Sentry test.
 
@@ -241,7 +243,11 @@ Rules:
 - If Qdrant Cloud is unavailable, CodeGuard must still analyze with Tavily/normal prompt.
 
 Exit Criteria:
-- Railway worker logs show RAG query attempt and safe fallback or success.
+- Railway worker logs show `rag_query_started` plus `rag_query_succeeded`
+  or `rag_query_failed`.
+- Local/worker smoke logs show either `rag_qdrant_smoke_ok` or
+  `Qdrant connection succeeded but no collections are indexed yet`.
+  The latter confirms 14.7 cloud wiring and hands collection creation to 14.8.
 - GitHub PR/Sentry output remains usable.
 
 Test Gate:
