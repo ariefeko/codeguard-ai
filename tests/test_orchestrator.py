@@ -204,6 +204,27 @@ class TestSearchEnrichment:
             "owasp_top10": "owasp ref",
         }
 
+    def test_falls_back_to_tavily_when_review_rag_returns_no_snippets(
+        self,
+        orchestrator,
+    ):
+        orchestrator.rag.retrieve_for_context.return_value = []
+        orchestrator.search.search_best_practices.return_value = "python ref"
+        orchestrator.search.search_owasp.return_value = "owasp ref"
+        context = {
+            "changed_files": {"src/app.py": "print('ok')"},
+            "related_files": {},
+        }
+
+        result = orchestrator._enrich_with_search(context)
+
+        assert result == {
+            "python_security": "python ref",
+            "owasp_top10": "owasp ref",
+        }
+        orchestrator.rag.retrieve_for_context.assert_called_once_with(context)
+        orchestrator.rag.format_prompt_snippets.assert_not_called()
+
     def test_enriches_python_review_and_owasp_reference(self, orchestrator):
         orchestrator.search.search_best_practices.return_value = "python ref"
         orchestrator.search.search_owasp.return_value = "owasp ref"
@@ -284,6 +305,27 @@ class TestSearchEnrichment:
         orchestrator.rag.retrieve_for_error.assert_called_once_with(error, context)
         orchestrator.rag.format_prompt_snippets.assert_called_once_with(snippets)
         orchestrator.search._search.assert_not_called()
+
+    def test_falls_back_to_tavily_when_error_rag_returns_no_snippets(
+        self,
+        orchestrator,
+    ):
+        orchestrator.rag.retrieve_for_error.return_value = []
+        orchestrator.search._search.return_value = "runtime reference"
+        context = {
+            "changed_files": {"src/app.py": "raise RuntimeError()"},
+            "related_files": {},
+        }
+        error = {"type": "RuntimeError", "file": "src/app.py"}
+
+        result = orchestrator._search_for_error(error, context)
+
+        assert result == {"error_info": "runtime reference"}
+        orchestrator.rag.retrieve_for_error.assert_called_once_with(error, context)
+        orchestrator.rag.format_prompt_snippets.assert_not_called()
+        orchestrator.search._search.assert_called_once_with(
+            "RuntimeError fix solution best practice"
+        )
 
     def test_skips_error_search_without_type(self, orchestrator):
         assert orchestrator._search_for_error({}) == {}

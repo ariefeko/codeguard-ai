@@ -2,7 +2,7 @@ import os
 import httpx
 from src.orchestration.prompts import build_code_review_prompt, build_bug_fix_prompt
 from src.orchestration.tavily_client import CodeGuardSearch
-from src.rag import RAGPipeline
+from src.rag import RAGPipeline, RAGSnippet
 from src.orchestration.schemas import (
     BugAnalysis,
     extract_content,
@@ -71,11 +71,14 @@ class Orchestrator:
 
     def _enrich_with_search(self, context: dict) -> dict:
         """Curated RAG first, then Tavily fallback based on file extension."""
-        results = {}
         rag_context = self._format_rag_for_context(context)
         if rag_context:
-            results["rag"] = rag_context
-            return results
+            return {"rag": rag_context}
+
+        return self._search_review_references(context)
+
+    def _search_review_references(self, context: dict) -> dict:
+        results = {}
 
         for file_path in context.get("changed_files", {}).keys():
             if file_path.endswith(".php"):
@@ -101,12 +104,11 @@ class Orchestrator:
 
     def _search_for_error(self, error: dict, context: dict | None = None) -> dict:
         """Curated RAG first, then Tavily fallback for Sentry error context."""
-        results = {}
         rag_context = self._format_rag_for_error(error, context or {})
         if rag_context:
-            results["rag"] = rag_context
-            return results
+            return {"rag": rag_context}
 
+        results = {}
         error_type = error.get("type", "")
         if error_type:
             results["error_info"] = self.search._search(
@@ -117,7 +119,7 @@ class Orchestrator:
     def _format_rag_for_context(self, context: dict) -> str:
         try:
             snippets = self.rag.retrieve_for_context(context)
-            return self.rag.format_prompt_snippets(snippets)
+            return self._format_rag_snippets(snippets)
         except Exception as exc:
             print(f"[RAG] Review enrichment failed: {type(exc).__name__}")
             return ""
@@ -125,10 +127,15 @@ class Orchestrator:
     def _format_rag_for_error(self, error: dict, context: dict) -> str:
         try:
             snippets = self.rag.retrieve_for_error(error, context)
-            return self.rag.format_prompt_snippets(snippets)
+            return self._format_rag_snippets(snippets)
         except Exception as exc:
             print(f"[RAG] Error enrichment failed: {type(exc).__name__}")
             return ""
+
+    def _format_rag_snippets(self, snippets: list[RAGSnippet]) -> str:
+        if not snippets:
+            return ""
+        return self.rag.format_prompt_snippets(snippets).strip()
 
     def _call_llm(self, prompt: str) -> str:
         """Kirim prompt ke provider dengan fallback chain. Dipakai review_code()."""
