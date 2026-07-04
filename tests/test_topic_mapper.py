@@ -10,9 +10,7 @@ def test_maps_laravel_sql_injection_context_to_security_topics():
     context = {
         "changed_files": {
             "app/Http/Controllers/UserController.php": (
-                "<?php\n"
-                "use Illuminate\\Support\\Facades\\DB;\n"
-                "$users = DB::raw('select * from users where email = ' . $email);"
+                "Laravel controller builds raw sql from request input."
             )
         },
         "related_files": {},
@@ -33,8 +31,7 @@ def test_maps_fastapi_context_without_external_dependencies():
     context = {
         "changed_files": {
             "src/api/main.py": (
-                "from fastapi import FastAPI, Depends\n"
-                "app = FastAPI()\n"
+                "FastAPI service uses dependency injection for request handlers."
             )
         },
         "related_files": {},
@@ -54,9 +51,7 @@ def test_maps_express_typescript_context():
     context = {
         "changed_files": {
             "src/routes/users.ts": (
-                "import express from 'express';\n"
-                "const router = express.Router();\n"
-                "router.post('/users', handler);\n"
+                "Express route delegates user creation to middleware."
             )
         },
         "related_files": {},
@@ -69,6 +64,65 @@ def test_maps_express_typescript_context():
     assert "express_security_basics" in result.topics
     assert "express_middleware_patterns" in result.topics
     assert result.collections == ("bestpractice_js", "quality_general")
+
+
+def test_maps_tsx_context_with_automatic_jsx_runtime_to_react_topics():
+    mapper = TopicMapper()
+    context = {
+        "changed_files": {
+            "src/components/ProfileCard.tsx": (
+                "export function ProfileCard({ bio }) { return <section>{bio}</section>; }"
+            )
+        },
+        "related_files": {},
+    }
+
+    result = mapper.from_context(context)
+
+    assert result.language == "js"
+    assert result.framework == "react"
+    assert "react_security_basics" in result.topics
+    assert "react_best_practices" in result.topics
+    assert result.collections == ("bestpractice_js", "quality_general")
+
+
+def test_python_eval_does_not_map_to_react_security_topic():
+    mapper = TopicMapper()
+    context = {
+        "changed_files": {"src/app.py": "value = eval(user_input)"},
+        "related_files": {},
+    }
+
+    result = mapper.from_context(context)
+
+    assert result.language == "python"
+    assert result.framework == "unknown"
+    assert result.category == CATEGORY_CODE_QUALITY
+    assert "react_eval_injection" not in result.topics
+    assert result.topics == (
+        "secure_coding_basics",
+        "code_review_best_practices",
+    )
+
+
+def test_maps_react_string_timer_to_eval_injection_topic():
+    mapper = TopicMapper()
+    context = {
+        "changed_files": {
+            "src/App.tsx": (
+                'import React from "react"; setInterval("alert(userInput)", 1000);'
+            )
+        },
+        "related_files": {},
+    }
+
+    result = mapper.from_context(context)
+
+    assert result.language == "js"
+    assert result.framework == "react"
+    assert result.category == CATEGORY_SECURITY
+    assert "react_eval_injection" in result.topics
+    assert result.collections == ("security_js", "security_general")
 
 
 def test_unknown_context_falls_back_to_general_quality_topics():
@@ -109,10 +163,7 @@ def test_maps_laravel_model_not_found_error_to_quality_and_framework_topics():
     mapper = TopicMapper()
     context = {
         "changed_files": {
-            "app/Services/BillingService.php": (
-                "<?php\n"
-                "use Illuminate\\Database\\Eloquent\\Model;\n"
-            )
+            "app/Models/BillingAccount.php": "Laravel model lookup can miss records."
         },
         "related_files": {},
     }

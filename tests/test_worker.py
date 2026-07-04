@@ -214,7 +214,7 @@ def test_github_review_falls_back_to_branch_lookup_with_head_owner():
 def test_sentry_job_fetches_context_from_default_branch(bug_analysis_factory):
     context_builder = MagicMock()
     context_builder.build.return_value = {
-        "changed_files": {"src/app.py": "raise RuntimeError()"},
+        "changed_files": {"src/app.py": "changed content"},
         "related_files": {},
     }
     orchestrator = MagicMock()

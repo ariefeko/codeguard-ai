@@ -24,7 +24,7 @@ def test_code_review_prompt_separates_rag_from_latest_references():
 
 def test_bug_fix_prompt_separates_rag_from_latest_references():
     context = {
-        "changed_files": {"src/app.py": "raise RuntimeError()"},
+        "changed_files": {"src/app.py": "changed content"},
         "related_files": {},
     }
     error = {

