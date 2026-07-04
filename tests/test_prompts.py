@@ -3,7 +3,7 @@ from src.orchestration.prompts import build_bug_fix_prompt, build_code_review_pr
 
 def test_code_review_prompt_separates_rag_from_latest_references():
     context = {
-        "changed_files": {"app/Http/Controllers/UserController.php": "<?php"},
+        "changed_files": {"app/Http/Controllers/UserController.php": "changed content"},
         "related_files": {},
     }
 

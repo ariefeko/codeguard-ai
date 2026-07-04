@@ -77,7 +77,7 @@ def test_has_blocking_findings_ignores_non_blocking_summary():
 def test_github_review_uses_pr_number_from_webhook():
     context_builder = MagicMock()
     context_builder.build.return_value = {
-        "changed_files": {"src/app.py": "print('ok')"},
+        "changed_files": {"src/app.py": "changed content"},
         "related_files": {},
     }
     orchestrator = MagicMock()
@@ -108,7 +108,7 @@ def test_github_review_uses_pr_number_from_webhook():
 def test_github_review_sets_failure_status_for_blocking_findings():
     context_builder = MagicMock()
     context_builder.build.return_value = {
-        "changed_files": {"src/app.py": "print('ok')"},
+        "changed_files": {"src/app.py": "changed content"},
         "related_files": {},
     }
     orchestrator = MagicMock()
@@ -183,7 +183,7 @@ def test_github_review_sets_error_status_when_worker_fails():
 def test_github_review_falls_back_to_branch_lookup_with_head_owner():
     context_builder = MagicMock()
     context_builder.build.return_value = {
-        "changed_files": {"src/app.py": "print('ok')"},
+        "changed_files": {"src/app.py": "changed content"},
         "related_files": {},
     }
     orchestrator = MagicMock()

@@ -46,7 +46,7 @@ class QdrantRuntimeClient:
             )
 
         documents.sort(
-            key=lambda item: float(item.metadata.get("confidence") or 0),
+            key=lambda item: self._safe_float(item.metadata.get("confidence")),
             reverse=True,
         )
         return documents[:limit]
@@ -113,3 +113,9 @@ class QdrantRuntimeClient:
             points = result
 
         return points if isinstance(points, list) else []
+
+    def _safe_float(self, value: Any) -> float:
+        try:
+            return float(value or 0)
+        except (TypeError, ValueError):
+            return 0.0

@@ -113,7 +113,7 @@ class TestStructuredFallbackChain:
 class TestEntryPoints:
     def test_review_code_builds_prompt_with_search_results(self, orchestrator):
         context = {
-            "changed_files": {"src/app.py": "print('ok')"},
+            "changed_files": {"src/app.py": "changed content"},
             "related_files": {},
         }
         orchestrator._enrich_with_search = MagicMock(
@@ -140,7 +140,7 @@ class TestEntryPoints:
         bug_analysis_factory,
     ):
         context = {
-            "changed_files": {"src/app.py": "raise RuntimeError()"},
+            "changed_files": {"src/app.py": "changed content"},
             "related_files": {},
         }
         error = {
@@ -176,7 +176,7 @@ class TestSearchEnrichment:
         orchestrator.rag.retrieve_for_context.return_value = snippets
         orchestrator.rag.format_prompt_snippets.return_value = "Relevant curated knowledge"
         context = {
-            "changed_files": {"app/Service.php": "<?php"},
+            "changed_files": {"app/Service.php": "changed content"},
             "related_files": {},
         }
 
@@ -193,7 +193,7 @@ class TestSearchEnrichment:
         orchestrator.search.search_best_practices.return_value = "python ref"
         orchestrator.search.search_owasp.return_value = "owasp ref"
         context = {
-            "changed_files": {"src/app.py": "print('ok')"},
+            "changed_files": {"src/app.py": "changed content"},
             "related_files": {},
         }
 
@@ -212,7 +212,7 @@ class TestSearchEnrichment:
         orchestrator.search.search_best_practices.return_value = "python ref"
         orchestrator.search.search_owasp.return_value = "owasp ref"
         context = {
-            "changed_files": {"src/app.py": "print('ok')"},
+            "changed_files": {"src/app.py": "changed content"},
             "related_files": {},
         }
 
@@ -229,7 +229,7 @@ class TestSearchEnrichment:
         orchestrator.search.search_best_practices.return_value = "python ref"
         orchestrator.search.search_owasp.return_value = "owasp ref"
         context = {
-            "changed_files": {"src/app.py": "print('ok')"},
+            "changed_files": {"src/app.py": "changed content"},
             "related_files": {},
         }
 
@@ -251,7 +251,7 @@ class TestSearchEnrichment:
             "top ten ref",
         ]
         context = {
-            "changed_files": {"app/Service.php": "<?php"},
+            "changed_files": {"app/Service.php": "changed content"},
             "related_files": {},
         }
 
@@ -267,7 +267,7 @@ class TestSearchEnrichment:
         orchestrator.search.search_best_practices.return_value = "js ref"
         orchestrator.search.search_owasp.return_value = None
         context = {
-            "changed_files": {"src/app.ts": "export {}"},
+            "changed_files": {"src/app.ts": "changed content"},
             "related_files": {},
         }
 
@@ -294,7 +294,7 @@ class TestSearchEnrichment:
         orchestrator.rag.retrieve_for_error.return_value = snippets
         orchestrator.rag.format_prompt_snippets.return_value = "Relevant bug knowledge"
         context = {
-            "changed_files": {"src/app.py": "raise RuntimeError()"},
+            "changed_files": {"src/app.py": "changed content"},
             "related_files": {},
         }
         error = {"type": "RuntimeError", "file": "src/app.py"}
@@ -313,7 +313,7 @@ class TestSearchEnrichment:
         orchestrator.rag.retrieve_for_error.return_value = []
         orchestrator.search._search.return_value = "runtime reference"
         context = {
-            "changed_files": {"src/app.py": "raise RuntimeError()"},
+            "changed_files": {"src/app.py": "changed content"},
             "related_files": {},
         }
         error = {"type": "RuntimeError", "file": "src/app.py"}

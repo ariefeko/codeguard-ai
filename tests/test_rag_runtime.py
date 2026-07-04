@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.rag.qdrant_client import QdrantDocument, QdrantRuntimeClient
-from src.rag.rag_pipeline import RAGPipeline
+from src.rag.rag_pipeline import RAGPipeline, RAGSnippet
 from src.rag.topic_mapper import TopicSelection
 
 
@@ -108,6 +108,41 @@ def test_qdrant_client_sorts_and_limits_by_confidence():
     assert [doc.content for doc in documents] == ["confidence 0.95"]
 
 
+def test_qdrant_client_treats_malformed_confidence_as_lowest():
+    def response_for(confidence):
+        response = MagicMock()
+        response.json.return_value = {
+            "result": {
+                "points": [
+                    {
+                        "payload": {
+                            "content": f"confidence {confidence}",
+                            "topic": "owasp_sql_injection",
+                            "confidence": confidence,
+                        }
+                    }
+                ]
+            }
+        }
+        return response
+
+    with patch(
+        "src.rag.qdrant_client.httpx.post",
+        side_effect=[response_for("not-a-number"), response_for(0.8)],
+    ):
+        client = QdrantRuntimeClient(url="https://qdrant.example.com")
+        documents = client.query_by_filter(
+            collections=("security_php", "security_general"),
+            filters={"topics": ("owasp_sql_injection",)},
+            limit=2,
+        )
+
+    assert [doc.content for doc in documents] == [
+        "confidence 0.8",
+        "confidence not-a-number",
+    ]
+
+
 def test_qdrant_client_returns_empty_when_not_configured():
     client = QdrantRuntimeClient(url="")
 
@@ -144,6 +179,54 @@ def test_rag_pipeline_returns_prompt_ready_snippets():
     assert "confidence: 0.92" in prompt_block
 
 
+def test_rag_pipeline_handles_malformed_confidence_metadata():
+    client = MagicMock()
+    client.is_configured = True
+    client.query_by_filter.return_value = [
+        QdrantDocument(
+            content="Use parameterized queries.",
+            metadata={
+                "topic": "owasp_sql_injection",
+                "category": "security",
+                "confidence": "not-a-number",
+            },
+            collection="security_php",
+        )
+    ]
+
+    pipeline = RAGPipeline(client=client, enabled=True)
+    snippets = pipeline.retrieve(selection())
+
+    assert len(snippets) == 1
+    assert snippets[0].confidence == 0.0
+    assert "confidence: 0.00" in pipeline.format_prompt_snippets(snippets)
+
+
+def test_rag_pipeline_limits_and_shortens_prompt_snippets():
+    pipeline = RAGPipeline(client=MagicMock(), enabled=True, max_results=2)
+    long_content = "Use bindings. " * 80
+    snippets = [
+        RAGSnippet(
+            content=long_content,
+            topic=f"topic_{index}",
+            category="security",
+            source_title="",
+            source_url="https://example.com",
+            confidence=0.9,
+            collection="security_php",
+        )
+        for index in range(3)
+    ]
+
+    prompt_block = pipeline.format_prompt_snippets(snippets)
+
+    assert "1. [topic_0]" in prompt_block
+    assert "2. [topic_1]" in prompt_block
+    assert "3. [topic_2]" not in prompt_block
+    assert "..." in prompt_block
+    assert "https://example.com" in prompt_block
+
+
 def test_rag_pipeline_returns_empty_when_disabled():
     client = MagicMock()
     client.is_configured = True
@@ -170,7 +253,7 @@ def test_rag_pipeline_uses_topic_mapper_for_context():
     context = {
         "changed_files": {
             "app/Http/Controllers/UserController.php": (
-                "<?php DB::raw('select * from users where id=' . $id);"
+                "Laravel controller builds raw sql from request input."
             )
         },
         "related_files": {},

@@ -1,5 +1,6 @@
 import os
 from dataclasses import dataclass
+from typing import Any
 
 from src.rag.qdrant_client import QdrantDocument, QdrantRuntimeClient
 from src.rag.topic_mapper import TopicMapper, TopicSelection
@@ -79,7 +80,7 @@ class RAGPipeline:
         for index, snippet in enumerate(snippets[: self.max_results], start=1):
             source = snippet.source_title or snippet.source_url or "unknown source"
             lines.append(
-                f"{index}. [{snippet.topic}] {snippet.content} "
+                f"{index}. [{snippet.topic}] {self._shorten(snippet.content)} "
                 f"(source: {source}, confidence: {snippet.confidence:.2f})"
             )
         return "\n".join(lines)
@@ -92,7 +93,7 @@ class RAGPipeline:
             category=str(metadata.get("category", "")),
             source_title=str(metadata.get("source_title", "")),
             source_url=str(metadata.get("source_url", "")),
-            confidence=float(metadata.get("confidence") or 0),
+            confidence=self._safe_float(metadata.get("confidence")),
             collection=document.collection,
         )
 
@@ -104,3 +105,9 @@ class RAGPipeline:
 
     def _env_bool(self, name: str) -> bool:
         return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+    def _safe_float(self, value: Any) -> float:
+        try:
+            return float(value or 0)
+        except (TypeError, ValueError):
+            return 0.0
