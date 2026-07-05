@@ -183,6 +183,7 @@ codeguard-ai/
 │   │   ├── rag_pipeline.py        # Optional curated RAG retrieval
 │   │   ├── sync.py                # Local sync tooling for Qdrant Cloud
 │   │   ├── topic_mapper.py        # Maps code/error context to RAG topics
+│   │   ├── updater.py             # Local TTL/hash refresh planner
 │   │   └── seeds/                 # Curated MVP knowledge seed
 │   ├── utils/
 │   │   └── __init__.py            # Placeholder
@@ -285,6 +286,12 @@ python -m src.rag.sync --check-target
 
 # Write to Qdrant Cloud only after explicitly approving the remote sync risk.
 python -m src.rag.sync --execute
+
+# Check expired curated seed entries without writing files or syncing.
+python -m src.rag.updater
+
+# Apply approved local refreshes to the seed file, then re-run indexer/sync.
+python -m src.rag.updater --updates-file approved_updates.json --write
 ```
 
 ### Run Locally

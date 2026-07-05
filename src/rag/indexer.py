@@ -169,7 +169,7 @@ def _to_indexed_point(
         "document_id": document_id,
         "collection": collection,
         "content": content,
-        "content_hash": _content_hash(content),
+        "content_hash": content_hash(content),
         "framework_version": metadata.get("framework_version", "unknown"),
         "source_type": metadata.get("source_type", "curated_seed"),
         "severity": metadata.get("severity", "unknown"),
@@ -187,9 +187,13 @@ def _to_indexed_point(
     )
 
 
-def _content_hash(content: str) -> str:
+def content_hash(content: str) -> str:
     digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
     return f"sha256:{digest}"
+
+
+def _content_hash(content: str) -> str:
+    return content_hash(content)
 
 
 def _point_id(document_id: str) -> str:

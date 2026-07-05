@@ -304,16 +304,21 @@ Work:
 - Hash cleaned content.
 - Update timestamp only when content hash is unchanged.
 - Re-embed and sync only when curated content changes.
+- Keep command entry point as:
+  - `python -m src.rag.updater`
+  - `python -m src.rag.updater --updates-file approved_updates.json --write`
 
 Rules:
 - Updater does not run in PR/Sentry request path.
 - Updater should be local/manual or scheduled separately.
 - Bad source quality must be rejected before storing.
+- Updater dry-run must not write the seed file, index bundle, or Qdrant target.
 
 Exit Criteria:
 - Fresh topics skip refresh.
 - Expired unchanged topics update metadata only.
 - Expired changed topics prepare updated content for sync.
+- CLI summary reports whether a re-index/sync is required.
 
 Test Gate:
 - Run TTL/hash unit tests.
