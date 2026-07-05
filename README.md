@@ -177,9 +177,11 @@ codeguard-ai/
 │   │   ├── orchestrator.py        # LLM orchestration + fallback chain
 │   │   └── prompts.py             # Prompt templates per analysis type
 │   ├── rag/
+│   │   ├── indexer.py            # Local curated seed index preparation
 │   │   ├── qdrant_client.py       # Read-only Qdrant runtime client
 │   │   ├── qdrant_smoke.py        # Qdrant Cloud smoke query command
 │   │   ├── rag_pipeline.py        # Optional curated RAG retrieval
+│   │   ├── sync.py                # Local sync tooling for Qdrant Cloud
 │   │   ├── topic_mapper.py        # Maps code/error context to RAG topics
 │   │   └── seeds/                 # Curated MVP knowledge seed
 │   ├── utils/
@@ -258,6 +260,31 @@ For a local Qdrant instance without an API key:
 
 ```bash
 RAG_ENABLED=true python -m src.rag.qdrant_smoke --allow-missing-api-key
+```
+
+### RAG Indexer And Sync
+
+The MVP index uses metadata/filter retrieval, so the generated Qdrant points use
+a one-dimensional placeholder vector. Real local Ollama/nomic embeddings can
+replace that later without changing the production runtime path.
+
+```bash
+source .venv/bin/activate
+
+# Prepare and validate the curated seed without writing files.
+python -m src.rag.indexer
+
+# Write the generated local bundle. The output path is gitignored.
+python -m src.rag.indexer --write
+
+# Plan Qdrant collection creation/upserts without touching the network.
+python -m src.rag.sync
+
+# Read-only target check against Qdrant Cloud.
+python -m src.rag.sync --check-target
+
+# Write to Qdrant Cloud only after explicitly approving the remote sync risk.
+python -m src.rag.sync --execute
 ```
 
 ### Run Locally

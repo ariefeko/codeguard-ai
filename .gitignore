@@ -10,6 +10,7 @@ __pycache__/
 *.pyc
 
 ai-results/
+src/rag/indexed/
 
 Modelfile
 Thinkpad-T14.md

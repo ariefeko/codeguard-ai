@@ -265,6 +265,12 @@ Work:
 - Create `src/rag/indexer.py`.
 - Create `src/rag/sync.py`.
 - Use local Ollama/nomic for embeddings if vector embeddings are needed.
+- MVP metadata/filter retrieval may use a one-dimensional placeholder vector for
+  Qdrant collection compatibility until semantic retrieval is introduced.
+- Keep sync safe by default:
+  - `python -m src.rag.sync` performs a dry-run only.
+  - `python -m src.rag.sync --check-target` performs a read-only target check.
+  - `python -m src.rag.sync --execute` performs remote writes after explicit approval.
 - Keep command entry points as:
   - `python -m src.rag.indexer`
   - `python -m src.rag.sync`
@@ -276,7 +282,9 @@ Rules:
 
 Exit Criteria:
 - Local indexing can prepare/update knowledge.
-- Sync can push prepared knowledge to Qdrant Cloud.
+- Sync can plan and push prepared knowledge to Qdrant Cloud.
+- Remote sync execution must be explicitly approved because it writes curated local data
+  to an external Qdrant target.
 
 Test Gate:
 - Run indexer dry-run.
