@@ -50,24 +50,29 @@ def test_get_redis_url_rejects_url_without_scheme(monkeypatch):
 
     try:
         worker.get_redis_url()
-    except ValueError as exc:
+    except worker.RedisConfigurationError as exc:
         message = str(exc)
-        assert "not a valid Redis connection URL" in message
+        assert "Redis connection URL is invalid" in message
         assert "super-secret" not in message
         assert invalid_url not in message
+        assert "REDIS_URL" not in message
+        assert exc.reason == "invalid_url"
+        assert exc.__context__ is None
     else:
-        raise AssertionError("Expected ValueError")
+        raise AssertionError("Expected RedisConfigurationError")
 
 
 def test_missing_redis_configuration_message_has_no_credential_template(monkeypatch):
     clear_redis_env(monkeypatch)
 
-    with pytest.raises(RuntimeError) as exc_info:
+    with pytest.raises(worker.RedisConfigurationError) as exc_info:
         worker.get_redis_url()
 
     message = str(exc_info.value)
     assert "password" not in message.lower()
     assert "redis://" not in message
+    assert "REDIS_URL" not in message
+    assert exc_info.value.reason == "missing"
 
 
 def test_get_redis_connection_sets_socket_timeouts(monkeypatch):

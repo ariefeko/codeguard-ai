@@ -235,6 +235,7 @@ class Orchestrator:
                 headers=headers,
                 json=payload,
                 timeout=LLM_REQUEST_TIMEOUT_SECONDS,
+                verify=True,
             )
 
             if response.status_code == 200:
@@ -260,6 +261,12 @@ class Orchestrator:
                 print(f"[Orchestrator] HTTP {response.status_code} from provider")
                 return None
 
+        except httpx.TransportError as exc:
+            print(
+                "[Orchestrator] Provider TLS/network failure: "
+                f"{type(exc).__name__}"
+            )
+            return None
         except Exception as e:
             print(f"[Orchestrator] Exception: {e}")
             return None

@@ -22,6 +22,25 @@ BLOCKING_SEVERITY_RE = re.compile(
 )
 
 
+class RedisConfigurationError(RuntimeError):
+    """Sanitized Redis configuration failure safe for logs and tracebacks."""
+
+    MESSAGES = {
+        "invalid_url": (
+            "Redis connection URL is invalid. See the deployment documentation "
+            "for supported configuration formats."
+        ),
+        "missing": (
+            "Redis connection is not configured. See the deployment documentation "
+            "for supported Railway Redis settings."
+        ),
+    }
+
+    def __init__(self, reason: str):
+        self.reason = reason
+        super().__init__(self.MESSAGES.get(reason, "Redis configuration is invalid."))
+
+
 def get_redis_url() -> str:
     for name in ("REDIS_URL", "REDIS_PRIVATE_URL", "REDIS_PUBLIC_URL"):
         value = os.getenv(name)
@@ -32,10 +51,7 @@ def get_redis_url() -> str:
         if value.startswith(REDIS_URL_SCHEMES):
             return value
 
-        raise ValueError(
-            f"{name} is not a valid Redis connection URL. "
-            "See the deployment documentation for supported configuration formats."
-        )
+        raise RedisConfigurationError("invalid_url")
 
     host = os.getenv("REDISHOST") or os.getenv("REDIS_HOST")
     port = os.getenv("REDISPORT") or os.getenv("REDIS_PORT") or "6379"
@@ -46,10 +62,7 @@ def get_redis_url() -> str:
         auth = f":{password}@" if password else ""
         return f"redis://{auth}{host}:{port}"
 
-    raise RuntimeError(
-        "Redis connection is not configured. See the deployment documentation "
-        "for supported Railway Redis settings."
-    )
+    raise RedisConfigurationError("missing")
 
 
 def get_redis_connection():

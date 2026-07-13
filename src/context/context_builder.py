@@ -1,10 +1,15 @@
-from pathlib import Path
+import logging
+from pathlib import Path, PurePosixPath, PureWindowsPath
+from urllib.parse import unquote
 import re
 import base64
 import os
 import httpx
 from src.config import HTTP_REQUEST_TIMEOUT_SECONDS, SUPPORTED_EXTENSIONS, SKIP_DIRS
 from src.github.http_client import build_github_headers, get_github_http_client
+
+
+logger = logging.getLogger(__name__)
 
 # Regex import per bahasa
 IMPORT_PATTERNS = {
@@ -117,14 +122,34 @@ class ContextBuilder:
         """Buang file yang tidak perlu dianalisis."""
         result = []
         for f in files:
-            path = Path(f)
+            if not isinstance(f, str) or not f or "\x00" in f:
+                logger.warning("Rejected invalid repository path")
+                continue
+
+            normalized = f.replace("\\", "/")
+            decoded = normalized
+            for _ in range(2):
+                decoded = unquote(decoded)
+            posix_path = PurePosixPath(decoded.replace("\\", "/"))
+            windows_path = PureWindowsPath(decoded)
+            if (
+                posix_path.is_absolute()
+                or windows_path.is_absolute()
+                or bool(windows_path.drive)
+                or bool(windows_path.root)
+                or ".." in posix_path.parts
+            ):
+                logger.warning("Rejected suspicious repository path")
+                continue
+
+            path = Path(normalized)
             if path.suffix not in SUPPORTED_EXTENSIONS:
                 continue
             if ".blade." in path.name:
                 continue
             if any(part in SKIP_DIRS for part in path.parts):
                 continue
-            result.append(f)
+            result.append(normalized)
         return result
 
     def _fetch_file(self, file_path: str) -> str | None:

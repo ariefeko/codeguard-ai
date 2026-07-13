@@ -4,6 +4,7 @@ from types import NoneType
 from typing import get_type_hints
 from unittest.mock import MagicMock, call, patch
 
+import httpx
 import pytest
 
 from src.orchestration.orchestrator import (
@@ -379,6 +380,7 @@ class TestRequest:
         assert payload["response_format"] == {"type": "json_object"}
         assert payload["max_tokens"] == 4096
         assert payload["messages"] == [{"role": "user", "content": "prompt"}]
+        assert post.call_args.kwargs["verify"] is True
 
     def test_handles_openagentic_done_suffix(
         self,
@@ -440,3 +442,22 @@ class TestRequest:
             side_effect=RuntimeError("network down"),
         ):
             assert orchestrator._request("prompt", provider) is None
+
+    def test_returns_none_for_tls_certificate_failure(
+        self,
+        orchestrator,
+        monkeypatch,
+        capsys,
+    ):
+        provider = PROVIDER_CHAIN[0]
+        monkeypatch.setenv(provider["api_key"], "secret")
+
+        with patch(
+            "src.orchestration.orchestrator.httpx.post",
+            side_effect=httpx.ConnectError("certificate verify failed"),
+        ):
+            assert orchestrator._request("prompt", provider) is None
+
+        output = capsys.readouterr().out
+        assert "ConnectError" in output
+        assert "certificate verify failed" not in output
