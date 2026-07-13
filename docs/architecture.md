@@ -30,7 +30,10 @@ GitHub push/PR                 Sentry error
 
 | Area | Responsibility |
 |---|---|
-| `src/api` | FastAPI application, GitHub webhook, and Sentry webhook |
+| `src/api/main.py` | FastAPI application entry point |
+| `src/api/webhook.py` | Thin router aggregator |
+| `src/api/github_webhook.py` | GitHub signature, event parsing, repository policy, and enqueueing |
+| `src/api/sentry_webhook.py` | Sentry verification, event parsing, deduplication, and enqueueing |
 | `src/worker` | Redis connection, RQ jobs, and output coordination |
 | `src/github` | GitHub HTTP client, repository policy, and shared connection pooling |
 | `src/context` | File filtering, GitHub content retrieval, and related-file discovery |

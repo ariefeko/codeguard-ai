@@ -60,7 +60,7 @@ See [Curated RAG](docs/rag.md) for commands and configuration.
 
 ```text
 .venv/bin/pytest -q
-197 passed in 0.57s
+198 passed in 0.62s
 
 .venv/bin/python -m compileall -q src tests
 passed
@@ -77,7 +77,7 @@ Unit tests do not require live GitHub, Sentry, Redis, LLM, Tavily, or Qdrant ser
 2. Sanitize Sentry error and repository-path logs.
 3. Run Qdrant target checks and an approved remote seed sync.
 4. Enable RAG on Railway and verify one live PR plus one live Sentry event.
-5. Split large webhook and worker modules incrementally.
+5. Split Redis configuration and GitHub/Sentry jobs out of the worker module.
 6. Move the Sentry sample payload from `src/api` into test fixtures.
 
 ## Documentation

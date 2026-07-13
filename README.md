@@ -4,7 +4,7 @@ CodeGuard is an asynchronous AI code-review service. It receives GitHub and Sent
 
 [![Status](https://img.shields.io/badge/status-active%20development-orange?style=flat-square)](PROGRESS.md)
 [![Python](https://img.shields.io/badge/Python-3.11-blue?style=flat-square&logo=python)](https://python.org)
-[![Tests](https://img.shields.io/badge/tests-197%20passed-brightgreen?style=flat-square)](tests)
+[![Tests](https://img.shields.io/badge/tests-198%20passed-brightgreen?style=flat-square)](tests)
 
 ## Capabilities
 
@@ -71,7 +71,7 @@ Run tests:
 .venv/bin/pytest -q
 ```
 
-The latest verified result is **197 passed**. External GitHub, Sentry, Railway, and Qdrant checks remain operational tests.
+The latest verified result is **198 passed**. External GitHub, Sentry, Railway, and Qdrant checks remain operational tests.
 
 ## Webhooks
 

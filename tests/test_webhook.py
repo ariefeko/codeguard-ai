@@ -8,6 +8,17 @@ from src.api import webhook
 from src.github.repo_policy import RepositoryAllowlistNotConfiguredError
 
 
+def test_composed_router_exposes_each_webhook_once():
+    webhook_paths = [
+        route.path
+        for route in webhook.router.routes
+        if route.path.startswith("/webhook/")
+    ]
+
+    assert webhook_paths.count("/webhook/github") == 1
+    assert webhook_paths.count("/webhook/sentry") == 1
+
+
 class TestGithubSignature:
     def test_accepts_valid_github_signature(self, monkeypatch):
         monkeypatch.setenv("GITHUB_WEBHOOK_SECRET", "github-secret")
@@ -173,7 +184,7 @@ class TestExtractChangedFiles:
         http_client = MagicMock()
         http_client.get.side_effect = responses
         with patch(
-            "src.api.webhook.get_github_http_client",
+            "src.api.github_webhook.get_github_http_client",
             return_value=http_client,
         ):
             result = webhook.extract_changed_files("pull_request", payload)
@@ -216,7 +227,7 @@ class TestExtractChangedFiles:
         http_client = MagicMock()
         http_client.get.side_effect = full_page
         with patch(
-            "src.api.webhook.get_github_http_client",
+            "src.api.github_webhook.get_github_http_client",
             return_value=http_client,
         ):
             result = webhook.extract_changed_files("pull_request", payload)
@@ -278,7 +289,7 @@ class TestSentryDedup:
         request.body = AsyncMock(return_value=b"{}")
         request.headers.get.return_value = "invalid"
 
-        with patch("src.api.webhook.SentryAgent") as agent_cls:
+        with patch("src.api.sentry_webhook.SentryAgent") as agent_cls:
             agent_cls.return_value.verify_signature.return_value = False
 
             response = await webhook.sentry_webhook(request)
@@ -292,7 +303,7 @@ class TestSentryDedup:
         request.body = AsyncMock(return_value=b"{not-json")
         request.headers.get.return_value = "valid"
 
-        with patch("src.api.webhook.SentryAgent") as agent_cls:
+        with patch("src.api.sentry_webhook.SentryAgent") as agent_cls:
             agent_cls.return_value.verify_signature.return_value = True
 
             response = await webhook.sentry_webhook(request)
@@ -326,10 +337,10 @@ class TestSentryDedup:
             "issue_id": "issue-1",
         }
 
-        with patch("src.api.webhook.SentryAgent") as agent_cls, patch(
-            "src.api.webhook.get_redis_connection",
+        with patch("src.api.sentry_webhook.SentryAgent") as agent_cls, patch(
+            "src.api.sentry_webhook.get_redis_connection",
             return_value=redis_client,
-        ), patch("src.api.webhook.get_queue", return_value=queue):
+        ), patch("src.api.sentry_webhook.get_queue", return_value=queue):
             agent = agent_cls.return_value
             agent.verify_signature.return_value = True
             agent.parse_error.return_value = parsed_error
@@ -371,10 +382,10 @@ class TestSentryDedup:
             "issue_id": "issue-1",
         }
 
-        with patch("src.api.webhook.SentryAgent") as agent_cls, patch(
-            "src.api.webhook.get_redis_connection",
+        with patch("src.api.sentry_webhook.SentryAgent") as agent_cls, patch(
+            "src.api.sentry_webhook.get_redis_connection",
             return_value=redis_client,
-        ), patch("src.api.webhook.get_queue", return_value=queue):
+        ), patch("src.api.sentry_webhook.get_queue", return_value=queue):
             agent = agent_cls.return_value
             agent.verify_signature.return_value = True
             agent.parse_error.return_value = parsed_error
