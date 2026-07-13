@@ -1,449 +1,141 @@
-# 🛡️ CodeGuard AI
+# CodeGuard AI
 
-> **AI-powered autonomous code guardian.** Detects bugs, reviews PRs, and generates fix suggestions — for any language, any framework.
+CodeGuard is an asynchronous AI code-review service. It receives GitHub and Sentry webhooks, collects repository context, enriches analysis with optional curated RAG or Tavily, and publishes human-reviewable results to GitHub.
 
-[![Status](https://img.shields.io/badge/status-active%20development-orange?style=flat-square)](https://github.com/ariefeko/codeguard-ai)
+[![Status](https://img.shields.io/badge/status-active%20development-orange?style=flat-square)](PROGRESS.md)
 [![Python](https://img.shields.io/badge/Python-3.11-blue?style=flat-square&logo=python)](https://python.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688?style=flat-square&logo=fastapi)](https://fastapi.tiangolo.com)
-[![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-197%20passed-brightgreen?style=flat-square)](tests)
 
----
+## Capabilities
 
-## What is CodeGuard AI?
+- Review GitHub push and pull-request changes.
+- Convert Sentry errors into structured GitHub issues.
+- Publish commit statuses, PR comments, and fallback issues.
+- Use a bounded LLM provider fallback chain through OpenAgentic and Groq.
+- Retrieve curated Qdrant knowledge when `RAG_ENABLED=true`.
+- Fall back from RAG to Tavily, then to repository context alone.
+- Keep all generated changes behind a human review gate.
 
-CodeGuard AI is an **autonomous engineering system** that runs in the background — monitoring your codebase, detecting issues, and proposing fixes automatically. Not just a linter, but an agent that reasons.
+## How it works
 
-**4 core capabilities:**
-
-| Capability | Description |
-|---|---|
-| **Bug Detection** | Sentry error received → AI analyzes root cause + stack trace |
-| **PR Review** | GitHub PR opened → AI reviews diff, flags issues, suggests improvements |
-| **Security Scan** | Detects SQL injection, exposed secrets, insecure patterns |
-| **Code Quality** | Best practice checks, scalability warnings, refactor suggestions |
-
-**Human-in-the-loop:** AI proposes via PR comment or GitHub Issue — humans approve/merge. No automatic changes without review.
-
----
-
-## Connect CodeGuard AI to Any Repo
-
-CodeGuard AI requires **zero setup on the target repo** — no SDK, no config file, no dependency install. Just two steps:
-
-### Step 1 — Add GitHub Webhook
-
-Go to your target repo on GitHub:
-
-```
-Settings → Webhooks → Add webhook
-
-Payload URL : https://your-codeguard-url/webhook/github
-Content type: application/json
-Secret      : (optional, for signature verification)
-Events      : ✅ Pushes
-              ✅ Pull requests
-Active      : ✅
+```text
+GitHub or Sentry webhook
+        |
+ signature, payload, and repository checks
+        |
+     Redis / RQ
+        |
+       Worker
+        |
+ GitHub context + optional RAG/Tavily
+        |
+ OpenAgentic/Groq fallback
+        |
+ GitHub status, PR comment, or issue
 ```
 
-### Step 2 — Grant PAT Token Access
+See [Architecture](docs/architecture.md) for the detailed flows and failure boundaries.
 
-```
-GitHub → Settings → Developer settings →
-Personal access tokens → Fine-grained tokens →
-codeguard-ai token → Edit →
-Repository access → add your target repo
+## Quick start
 
-Permissions required:
-  ✅ Contents      → Read-only
-  ✅ Pull requests → Read and write
-  ✅ Issues        → Read and write
-  ✅ Metadata      → Read-only (auto)
-```
-
-That's it. CodeGuard AI reads all files via GitHub API — no cloning, no local access required.
-
-> **Supports any language:** PHP, Python, JavaScript, TypeScript, Java, Go, C#, Razor, and more.
-
----
-
-## System Architecture
-
-```
-Any Codebase (Any Language / Framework)
-   │
-   ├── (Trigger: Sentry Webhook / GitHub Actions PR / Scheduled Cron)
-   ▼
-Backend App (FastAPI Webhook Receiver)
-   │
-   ▼
-Redis Queue (Async processing; returns an instant 202 response)
-   │
-   ▼
-FastAPI Worker (Hosted on Railway)
-   │
-   ▼
-Orchestration Layer (Python 3.11 + LangChain)
-   ├── Retrieval-Augmented Generation (Optional: Qdrant + nomic-embed-text)
-   └── Prompt Engineering & Context Assembly
-   │
-   ▼
-OpenRouter LLM Gateway
-   ├── Primary: DeepSeek V3 (Free Tier)
-   ├── Fallback 1: Gemini Flash
-   └── Fallback 2: Groq / Llama
-   │
-   ▼
-Output Generation
-   ├── GitHub PR Comment
-   ├── GitHub Issue Creation
-   └── Auto-fix Commit (Awaiting manual gate)
-   │
-   ▼
-✅ Human Review Gate (Approve / Reject → Merge)
-```
-
----
-
-## Core Features
-
-### Sentry Bug Agent
-Production error received by Sentry → webhook trigger → AI analyzes within seconds → GitHub Issue created automatically with:
-- Root cause analysis
-- Files likely involved
-- Step-by-step fix suggestion
-- Quick fix for immediate production relief
-- Prevention strategy going forward
-
-### PR Auto-Review Agent
-PR opened on GitHub → GitHub Actions trigger → AI reviews diff → comments directly on PR with:
-- Bug detection per line
-- Security vulnerability check
-- Best practice violations
-- Performance concerns
-- Improvement suggestions
-
-### Security Scanner
-- SQL Injection pattern detection
-- Exposed API keys / secrets
-- Insecure direct object reference
-- Missing authentication checks
-- Dependency vulnerability hints
-
-### Code Quality Analyzer
-- SOLID principle violations
-- N+1 query detection
-- Scalability bottlenecks
-- Dead code identification
-- Refactor opportunities
-
----
-
-## Tech Stack
-
-```
-Layer               Technology
-─────────────────────────────────────────
-AI Orchestration    Python 3.11 + LangChain
-API Layer           FastAPI + Uvicorn
-Queue Bridge        Redis (async job queue)
-LLM Gateway         OpenRouter (multi-provider fallback)
-LLM Primary         DeepSeek V3 (free tier)
-LLM Fallback        Gemini Flash → Groq/Llama
-Embeddings          nomic-embed-text (local, Ollama)
-Vector Store        Qdrant (RAG, optional)
-Deploy              Railway (free tier)
-Monitoring          Sentry webhook receiver
-CI/CD Trigger       GitHub Actions
-Testing             pytest + mock LLM
-```
-
----
-
-## 📁 Project Structure
-
-```
-codeguard-ai/
-├── src/
-│   ├── agents/
-│   │   └── sentry_agent.py        # File scanner engine
-│   ├── api/
-│   │   ├── main.py                # FastAPI app entry point
-│   │   └── webhook.py             # Webhook route handlers
-│   ├── context/
-│   │   └── context_builder.py     # GitHub API file fetcher + dependency resolver
-│   ├── github/
-│   │   └── github_client.py       # GitHub API wrapper (PR comment, Issue)
-│   ├── orchestration/
-│   │   ├── orchestrator.py        # LLM orchestration + fallback chain
-│   │   └── prompts.py             # Prompt templates per analysis type
-│   ├── rag/
-│   │   ├── indexer.py            # Local curated seed index preparation
-│   │   ├── qdrant_client.py       # Read-only Qdrant runtime client
-│   │   ├── qdrant_smoke.py        # Qdrant Cloud smoke query command
-│   │   ├── rag_pipeline.py        # Optional curated RAG retrieval
-│   │   ├── sync.py                # Local sync tooling for Qdrant Cloud
-│   │   ├── topic_mapper.py        # Maps code/error context to RAG topics
-│   │   ├── updater.py             # Local TTL/hash refresh planner
-│   │   └── seeds/                 # Curated MVP knowledge seed
-│   ├── utils/
-│   │   └── __init__.py            # Placeholder
-│   └── config.py                  # Single source of truth: extensions, skip dirs
-├── tests/
-│   ├── conftest.py
-│   └── __init__.py
-├── .env                           # API keys (not committed)
-├── .env.example
-├── .gitignore
-├── .pylintrc
-├── docker-compose.yml
-├── Procfile                       # Railway deploy config
-├── requirements.txt
-└── README.md
-```
-
----
-
-## Quick Start
-
-### Prerequisites
-- Python 3.11+
-<!-- - Redis (local or Railway) -->
-- OpenRouter API key (free tier)
-- GitHub Personal Access Token
-<!-- - Sentry account (free tier) -->
-- Railway account (free tier) ← used for deploy
-
-### Setup
+Requirements: Python 3.11+, Redis, a GitHub fine-grained PAT, and at least one supported LLM provider key.
 
 ```bash
-# Clone the repo
-git clone https://github.com/ariefeko/codeguard-ai.git
-cd codeguard-ai
-
-# Create and activate virtual environment
 python -m venv .venv
 source .venv/bin/activate
-
-# Install dependencies
 pip install -r requirements.txt
-
-# Copy and fill in environment variables
 cp .env.example .env
 ```
 
-### Environment Variables
+Minimum environment:
 
-```bash
-# LLM Providers (fallback chain)
-GITHUB_PAT_TOKEN = your-github-pat-token-here
-OPENROUTER_API_KEY = your-openrouter-api-key-here
-
-# Optional RAG / Qdrant Cloud
-QDRANT_URL = your-qdrant-cloud-url-here
-QDRANT_API_KEY = your-qdrant-api-key-here
-RAG_ENABLED = false
-RAG_MAX_RESULTS = 5
-RAG_MIN_CONFIDENCE = 0.65
+```text
+GITHUB_PAT_TOKEN=...
+GITHUB_WEBHOOK_SECRET=...
+CODEGUARD_ALLOWED_REPOS=owner/repository
+REDIS_URL=redis://...
+OPENAGENTIC_API_KEY=...
+# or GROQ_API_KEY=...
 ```
 
-### Qdrant Cloud Smoke Test
+Run the API and worker in separate terminals:
 
 ```bash
-source .venv/bin/activate
-RAG_ENABLED=true python -m src.rag.qdrant_smoke
-```
-
-If the command reports that Qdrant is connected but no collections are indexed
-yet, the cloud wiring is valid and the next step is running the Phase 14.8
-indexer/sync.
-
-For a local Qdrant instance without an API key:
-
-```bash
-RAG_ENABLED=true python -m src.rag.qdrant_smoke --allow-missing-api-key
-```
-
-### RAG Indexer And Sync
-
-The MVP index uses metadata/filter retrieval, so the generated Qdrant points use
-a one-dimensional placeholder vector. Real local Ollama/nomic embeddings can
-replace that later without changing the production runtime path.
-
-```bash
-source .venv/bin/activate
-
-# Prepare and validate the curated seed without writing files.
-python -m src.rag.indexer
-
-# Write the generated local bundle. The output path is gitignored.
-python -m src.rag.indexer --write
-
-# Plan Qdrant collection creation/upserts without touching the network.
-python -m src.rag.sync
-
-# Read-only target check against Qdrant Cloud.
-python -m src.rag.sync --check-target
-
-# Write to Qdrant Cloud only after explicitly approving the remote sync risk.
-python -m src.rag.sync --execute
-
-# Check expired curated seed entries without writing files or syncing.
-python -m src.rag.updater
-
-# Apply approved local refreshes to the seed file, then re-run indexer/sync.
-python -m src.rag.updater --updates-file approved_updates.json --write
-```
-
-### Run Locally
-
-```bash
-source .venv/bin/activate
-
-# Create new Session
-tmux new -s codeguard
-
-# Left panel: FastAPI
 uvicorn src.api.main:app --reload --port 8000
-
-# Create 2 panel inside tmux — Ctrl+B + %
-
-# Right panel: ngrok (Ctrl+B + arrow left or right)
-ngrok http 8000
-
-# Detach
-Ctrl+B lalu D
-
-# open tmux session again:
-tmux attach -t codeguard
+python -m src.worker.worker
 ```
 
-<!-- ### Run Tests
+Run tests:
 
 ```bash
-# Run all tests (no real API calls — LLM is mocked)
-pytest -v
-
-# Run with coverage report
-pytest --cov=src --cov-report=term-missing
-``` -->
-
----
-
-## LLM Fallback Chain
-
-CodeGuard AI does not rely on a single provider. If one is down or rate-limited, the system automatically falls back:
-
-```
-Incoming Analysis Request
-         │
-         ▼
-[ Attempt: DeepSeek V3 ] ──(Success)──→ Complete & Send Output
-         │
-     (Failed / Rate Limited)
-         ▼
-[ Fallback 1: Gemini Flash ] ──(Success)──→ Complete & Send Output
-         │
-     (Failed)
-         ▼
-[ Fallback 2: Groq / Llama ] ──(Success)──→ Complete & Send Output
-         │
-     (All Failed)
-         ▼
-Return Graceful Error Message
+.venv/bin/pytest -q
 ```
 
-All providers are on free tier — zero cost for development and MVP.
+The latest verified result is **197 passed**. External GitHub, Sentry, Railway, and Qdrant checks remain operational tests.
 
----
+## Webhooks
 
-## Testing Strategy
+Configure GitHub to send JSON push and pull-request events to:
 
-All tests are mocked — no real API calls, no billing:
-
-```python
-# Example: test analyze_with_fallback without hitting any API
-def test_analyze_returns_string(mock_openai_client):
-    error_data = {
-        "exception": {"type": "QueryException", "value": "timeout"},
-        "stacktrace": "#0 app/Models/User.php(42)",
-        "request": {"url": "https://app.com/api/users"}
-    }
-    result = analyze_with_fallback(error_data)
-    assert isinstance(result, str)
-    assert len(result) > 0
+```text
+POST https://your-codeguard-host/webhook/github
 ```
 
+Use the same `GITHUB_WEBHOOK_SECRET` in GitHub and CodeGuard. The fine-grained PAT needs read-only Contents plus read/write Pull requests, Issues, and Commit statuses for allowed repositories.
+
+Sentry events use:
+
+```text
+POST https://your-codeguard-host/webhook/sentry
 ```
-pytest coverage:
-  src/sentry_agent.py      87%
-  src/pr_reviewer.py       82%
-  src/utils/llm_client.py  91%
+
+Set `SENTRY_CLIENT_SECRET`, `CODEGUARD_DEFAULT_OWNER`, and `CODEGUARD_DEFAULT_REPO` for this flow.
+
+Full environment and deployment instructions are in [Setup and Operations](docs/setup.md).
+
+## Optional RAG
+
+```text
+RAG_ENABLED=true
+QDRANT_URL=https://your-cluster
+QDRANT_API_KEY=...
+RAG_MAX_RESULTS=5
+RAG_MIN_CONFIDENCE=0.65
 ```
 
----
+RAG is read-only in the production request path and never blocks analysis. Indexing, synchronization, and update commands are documented in [Curated RAG](docs/rag.md).
 
-<!-- ## 🗺️ Roadmap
+## Project layout
 
-### Phase 1 — MVP (Active) 🚧
-- [x] System architecture design
-- [x] FastAPI webhook receiver
-- [x] LLM fallback chain (DeepSeek → Gemini → Groq)
-- [x] Sentry Bug Agent
-- [x] GitHub Issue auto-creation
-- [x] Testing strategy (pytest + mock LLM)
-- [x] Railway deployment workflow
-- [ ] PR Auto-Review Agent
-- [ ] End-to-end demo
+```text
+src/
+├── agents/          Sentry verification and parsing
+├── api/             FastAPI application and webhooks
+├── context/         Repository context construction
+├── github/          GitHub client and repository policy
+├── orchestration/   Prompts, schemas, search, and LLM fallback
+├── rag/             Curated retrieval and local index tooling
+├── utils/           GitHub output formatting
+└── worker/          Redis/RQ jobs
 
-### Phase 2 — Intelligence
-- [ ] RAG: index codebase for context-aware review
-- [ ] Noise filter: deduplicate Sentry errors
-- [ ] Alert Rules Engine: configurable thresholds
-- [ ] Multi-project support
+tests/               Mock-based automated tests
+docs/                Current technical documentation
+Documentation/       Legacy exports and design assets
+```
 
-### Phase 3 — Scale
-- [ ] Monitoring dashboard (real-time job status)
-- [ ] Auto-fix commit (with human approval gate)
-- [ ] Support multiple VCS (GitLab, Bitbucket)
-- [ ] AWS horizontal scaling
+## Documentation
 
---- -->
+- [Documentation index](docs/README.md)
+- [Architecture](docs/architecture.md)
+- [Setup and Operations](docs/setup.md)
+- [Curated RAG](docs/rag.md)
+- [Security](docs/security.md)
+- [Implementation progress](PROGRESS.md)
 
-## Why CodeGuard AI?
+## Status
 
-Most AI coding tools are **reactive** — they wait for you to ask. CodeGuard AI is **proactive** — it watches your codebase and acts autonomously, like a tireless staff engineer running in the background.
-
-| | Copilot / Cursor | CodeRabbit / SonarQube | **CodeGuard AI** |
-|---|---|---|---|
-| Mode | Reactive (you ask) | Reactive (waits for PR) | **Proactive (24/7 autonomous)** |
-| Triggers | Manual prompt | PR opened | Sentry error, PR, cron, manual |
-| Coverage | Write-time only | Review-time only | **Error → Review → Fix → Deploy** |
-| AI Reasoning | ✅ | ⚠️ Limited | ✅ Full LLM reasoning |
-| Customizable | ❌ Black box | ❌ Black box | ✅ Fully open |
-| Cost | Paid | Paid | **Free tier** |
-| Language support | Any | Any | **Any** |
-
-> *"Most AI tools wait to be asked. CodeGuard AI watches your codebase and acts — like a tireless staff engineer running in the background."*
-
-CodeGuard AI is not a replacement for those tools — it is proof that any developer can build a system like this from scratch, own it completely, and adapt it to their specific stack and business context.
-
----
-
-## Author
-
-**Arief Eko** — Backend Engineer · PHP · Node.js · Python · LLM Integration
-
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-ariefeko-blue?style=flat-square)](https://www.linkedin.com/in/arief-eko-wicaksono-4175a12a)
-[![GitHub](https://img.shields.io/badge/GitHub-ariefeko-black?style=flat-square&logo=github)](https://github.com/ariefeko)
-[![Portfolio](https://img.shields.io/badge/Portfolio-ariefeko.github.io-orange?style=flat-square)](https://ariefeko.github.io)
-
----
+The GitHub and Sentry MVP workflows are implemented. Local RAG indexing and safe sync tooling are complete. The remaining work is primarily cloud/E2E validation, security hardening listed in [Security](docs/security.md), and incremental module cleanup.
 
 ## License
 
-MIT — free to use, fork, and learn from.
-
----
-
-> *"Tools are temporary. Concepts are permanent."*
-> — CodeGuard AI Engineering Guidebook
+MIT
