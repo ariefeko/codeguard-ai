@@ -2,6 +2,7 @@ from types import NoneType
 from typing import get_type_hints
 from unittest.mock import MagicMock, patch
 
+import logging
 import pytest
 
 from src.worker import worker
@@ -179,6 +180,50 @@ def test_github_review_handles_llm_failure_fallback():
     assert github.set_commit_status.call_args_list[1].args[:2] == ("abc123", "error")
     posted_body = github.post_pr_comment.call_args.args[1]
     assert worker.REVIEW_ANALYSIS_FALLBACK_MESSAGE in posted_body
+
+
+def test_github_review_does_not_log_llm_content(
+    monkeypatch,
+    caplog,
+    capsys,
+):
+    sensitive_result = "PRIVATE_CODE: api_key = top-secret"
+    monkeypatch.setenv("DEBUG_LLM_OUTPUT", "1")
+    context_builder = MagicMock()
+    context_builder.build.return_value = {
+        "changed_files": {"src/app.py": "changed content"},
+        "related_files": {},
+    }
+    orchestrator = MagicMock()
+    orchestrator.review_code.return_value = sensitive_result
+    github = MagicMock()
+
+    with caplog.at_level(logging.INFO), patch(
+        "src.worker.worker.ContextBuilder",
+        return_value=context_builder,
+    ), patch(
+        "src.worker.worker.Orchestrator",
+        return_value=orchestrator,
+    ), patch("src.worker.worker.GitHubClient", return_value=github):
+        worker.process_github_review(
+            "ariefeko",
+            "tagihin",
+            "abc123",
+            "feature/test",
+            ["src/app.py"],
+            pr_number=42,
+        )
+
+    captured = capsys.readouterr()
+    assert sensitive_result not in captured.out
+    assert sensitive_result not in caplog.text
+    record = next(
+        record
+        for record in caplog.records
+        if record.getMessage() == "LLM analysis completed"
+    )
+    assert record.analysis_type == "github_review"
+    assert record.result_length == len(sensitive_result)
 
 
 def test_github_review_sets_success_status_when_no_analyzable_files():

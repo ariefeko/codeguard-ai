@@ -46,16 +46,16 @@ class SentryAgent:
         ).hexdigest().encode("ascii")
 
         provided = (signature_header or "").encode("utf-8")
-        has_expected_length = len(provided) == len(computed)
-        normalized = (provided + (b"\x00" * len(computed)))[: len(computed)]
+        normalized = provided.ljust(len(computed), b"\x00")[: len(computed)]
         matches = hmac.compare_digest(computed, normalized)
+        has_expected_length = len(provided) == len(computed)
 
         if not signature_header:
             print("[SentryAgent] Tidak ada Sentry-Hook-Signature header")
         elif not has_expected_length or not matches:
             print("[SentryAgent] Sentry-Hook-Signature tidak valid")
 
-        return has_expected_length and matches
+        return bool(signature_header) and has_expected_length and matches
 
     def parse_error(self, payload: dict) -> dict | None:
         """

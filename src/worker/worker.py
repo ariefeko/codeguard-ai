@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 import redis
@@ -11,6 +12,7 @@ from src.utils.formatters import format_pr_comment, format_bug_issue, format_bug
 
 load_dotenv()
 
+logger = logging.getLogger(__name__)
 REDIS_URL_SCHEMES = ("redis://", "rediss://", "unix://")
 REVIEW_ANALYSIS_FALLBACK_MESSAGE = "Error: all LLM providers failed."
 BLOCKING_SEVERITY_RE = re.compile(
@@ -84,6 +86,21 @@ def review_status_for_result(review_result: str) -> tuple[str, str]:
     return "success", "CodeGuard found no blocking issues"
 
 
+def log_llm_completion(
+    analysis_type: str,
+    result_length: int,
+    status: str | None = None,
+) -> None:
+    """Log completion metadata without exposing model-generated content."""
+    metadata = {"analysis_type": analysis_type}
+    if status is not None:
+        metadata["analysis_status"] = status
+    if os.getenv("DEBUG_LLM_OUTPUT") == "1":
+        metadata["result_length"] = result_length
+
+    logger.info("LLM analysis completed", extra=metadata)
+
+
 def process_github_review(
     owner: str,
     repo: str,
@@ -131,8 +148,7 @@ def process_github_review(
         if result is None:
             result = REVIEW_ANALYSIS_FALLBACK_MESSAGE
 
-        print("\n[Worker] === LLM REVIEW RESULT ===")
-        print(result)
+        log_llm_completion("github_review", len(result))
 
         state, description = review_status_for_result(result)
         github.set_commit_status(
@@ -218,9 +234,11 @@ def process_sentry_job(
         github.create_issue(title, body, labels=["bug", "needs-manual-review"])
         return
 
-    print("\n[Worker] === BUG ANALYSIS RESULT ===")
-    print(f"Status: {analysis.status}")
-    print(f"Root cause: {analysis.root_cause}")
+    log_llm_completion(
+        "sentry_bug",
+        len(analysis.root_cause),
+        status=analysis.status,
+    )
 
     title = f"🐛 [Bug] {error_type} in {analysis.affected_file}"
     body = format_bug_issue(analysis, error)
