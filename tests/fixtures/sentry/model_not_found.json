@@ -1,4 +1,5 @@
-"exception": {
+{
+  "exception": {
     "values": [
       {
         "type": "Illuminate\\Database\\Eloquent\\ModelNotFoundException",
@@ -720,4 +721,5 @@
     "in_app_frame_mix": "mixed",
     "type": "Illuminate\\Database\\Eloquent\\ModelNotFoundException",
     "value": "No query results for model [App\\Models\\Tagihan] 99999999"
-  },
+  }
+}
