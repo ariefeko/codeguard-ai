@@ -3,6 +3,7 @@ import re
 import redis
 from rq import Worker, Queue
 from dotenv import load_dotenv
+from src.config import CODEGUARD_APP_ID
 from src.context.context_builder import ContextBuilder
 from src.orchestration.orchestrator import Orchestrator
 from src.github.github_client import GitHubClient
@@ -11,7 +12,6 @@ from src.utils.formatters import format_pr_comment, format_bug_issue, format_bug
 load_dotenv()
 
 REDIS_URL_SCHEMES = ("redis://", "rediss://", "unix://")
-CODEGUARD_STATUS_CONTEXT = "codeguard-ai"
 REVIEW_ANALYSIS_FALLBACK_MESSAGE = "Error: all LLM providers failed."
 BLOCKING_SEVERITY_RE = re.compile(
     r"^\s*(?:[-*]\s*)?(?:#+\s*)?(?:\d+\.\s*)?(critical|high)\b"
@@ -105,7 +105,7 @@ def process_github_review(
         ref,
         "pending",
         "CodeGuard review is running",
-        context=CODEGUARD_STATUS_CONTEXT,
+        context=CODEGUARD_APP_ID,
         target_url=status_target_url,
     )
 
@@ -120,7 +120,7 @@ def process_github_review(
                 ref,
                 "success",
                 "CodeGuard found no analyzable files",
-                context=CODEGUARD_STATUS_CONTEXT,
+                context=CODEGUARD_APP_ID,
                 target_url=status_target_url,
             )
             return
@@ -139,7 +139,7 @@ def process_github_review(
             ref,
             state,
             description,
-            context=CODEGUARD_STATUS_CONTEXT,
+            context=CODEGUARD_APP_ID,
             target_url=status_target_url,
         )
 
@@ -160,7 +160,7 @@ def process_github_review(
             ref,
             "error",
             "CodeGuard worker failed",
-            context=CODEGUARD_STATUS_CONTEXT,
+            context=CODEGUARD_APP_ID,
             target_url=status_target_url,
         )
         raise
@@ -174,7 +174,7 @@ def process_sentry_job(
     error_file: str,
     error_line: int | None,
     related_file_paths: list[str],
-):
+) -> None:
     """
     Job function yang dijalankan oleh worker untuk Sentry error.
     Dipanggil dari queue — bukan dari webhook langsung.

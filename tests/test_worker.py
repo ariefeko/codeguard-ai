@@ -1,8 +1,14 @@
+from types import NoneType
+from typing import get_type_hints
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from src.worker import worker
+
+
+def test_process_sentry_job_has_none_return_type():
+    assert get_type_hints(worker.process_sentry_job)["return"] is NoneType
 
 
 def clear_redis_env(monkeypatch):

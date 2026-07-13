@@ -14,6 +14,7 @@ from src.worker.worker import (
 )
 from src.agents.sentry_agent import SentryAgent
 from src.config import HTTP_REQUEST_TIMEOUT_SECONDS
+from src.github.http_client import build_github_headers, get_github_http_client
 from src.github.repo_policy import (
     RepositoryAllowlistNotConfiguredError,
     is_repo_allowed,
@@ -174,14 +175,12 @@ def extract_changed_files(event_type: str, payload: dict) -> list[str]:
         repo = payload["repository"]["name"]
         token = os.getenv("GITHUB_PAT_TOKEN")
 
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/vnd.github+json",
-        }
+        headers = build_github_headers(token)
         url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}/files"
+        http_client = get_github_http_client()
 
         for page in range(1, GITHUB_PR_FILES_MAX_PAGES + 1):
-            response = httpx.get(
+            response = http_client.get(
                 url,
                 headers=headers,
                 params={"per_page": GITHUB_PR_FILES_PER_PAGE, "page": page},

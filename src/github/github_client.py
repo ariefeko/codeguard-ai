@@ -3,7 +3,8 @@ import os
 from typing import Any
 
 import httpx
-from src.config import HTTP_REQUEST_TIMEOUT_SECONDS
+from src.config import CODEGUARD_APP_ID, HTTP_REQUEST_TIMEOUT_SECONDS
+from src.github.http_client import build_github_headers, get_github_http_client
 from src.github.repo_policy import is_repo_allowed, is_valid_repo_name
 
 
@@ -12,7 +13,12 @@ logger = logging.getLogger(__name__)
 
 
 class GitHubClient:
-    def __init__(self, owner: str, repo: str):
+    def __init__(
+        self,
+        owner: str,
+        repo: str,
+        http_client: httpx.Client | None = None,
+    ):
         if not is_valid_repo_name(owner, repo):
             raise ValueError("Invalid owner or repo name format")
 
@@ -22,11 +28,8 @@ class GitHubClient:
         self.owner = owner
         self.repo = repo
         self.token = os.getenv("GITHUB_PAT_TOKEN")
-        self.headers = {
-            "Authorization": f"Bearer {self.token}",
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        }
+        self.headers = build_github_headers(self.token)
+        self.http_client = http_client or get_github_http_client()
         self.base_url = f"https://api.github.com/repos/{owner}/{repo}"
 
     @staticmethod
@@ -85,7 +88,7 @@ class GitHubClient:
         sha: str,
         state: str,
         description: str,
-        context: str = "codeguard-ai",
+        context: str = CODEGUARD_APP_ID,
         target_url: str | None = None,
     ) -> bool:
         """
@@ -105,7 +108,7 @@ class GitHubClient:
             payload["target_url"] = target_url
 
         try:
-            response = httpx.post(
+            response = self.http_client.post(
                 url,
                 headers=self.headers,
                 json=payload,
@@ -132,7 +135,7 @@ class GitHubClient:
             return env_branch
 
         try:
-            response = httpx.get(
+            response = self.http_client.get(
                 self.base_url,
                 headers=self.headers,
                 timeout=HTTP_REQUEST_TIMEOUT_SECONDS,
@@ -165,7 +168,7 @@ class GitHubClient:
         owner = head_owner or self.owner
         url = f"{self.base_url}/pulls"
         try:
-            response = httpx.get(
+            response = self.http_client.get(
                 url,
                 headers=self.headers,
                 params={"state": "open", "head": f"{owner}:{branch}"},
@@ -218,7 +221,7 @@ class GitHubClient:
         url = f"{self.base_url}/issues/{pr_number}/comments"
         payload = {"body": body}
         try:
-            response = httpx.post(
+            response = self.http_client.post(
                 url,
                 headers=self.headers,
                 json=payload,
@@ -241,17 +244,17 @@ class GitHubClient:
         """
         Buat GitHub Issue — fallback kalau tidak ada PR, atau entry point
         untuk Sentry bug analysis.
-        labels default ["codeguard-ai"] kalau tidak di-pass -- perilaku
+        labels default [CODEGUARD_APP_ID] kalau tidak di-pass -- perilaku
         lama (dipanggil dari process_github_review) tidak berubah.
         """
         url = f"{self.base_url}/issues"
         payload = {
             "title": title,
             "body": body,
-            "labels": labels if labels is not None else ["codeguard-ai"],
+            "labels": labels if labels is not None else [CODEGUARD_APP_ID],
         }
         try:
-            response = httpx.post(
+            response = self.http_client.post(
                 url,
                 headers=self.headers,
                 json=payload,

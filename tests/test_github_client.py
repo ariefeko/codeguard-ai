@@ -21,7 +21,10 @@ from src.github.repo_policy import RepositoryAllowlistNotConfiguredError
 def client(monkeypatch):
     monkeypatch.setenv("GITHUB_PAT_TOKEN", "fake_token")
     monkeypatch.setenv("CODEGUARD_ALLOWED_REPOS", "ariefeko/tagihin")
-    return GitHubClient("ariefeko", "tagihin")
+    http_client = MagicMock()
+    http_client.post.side_effect = lambda *args, **kwargs: httpx.post(*args, **kwargs)
+    http_client.get.side_effect = lambda *args, **kwargs: httpx.get(*args, **kwargs)
+    return GitHubClient("ariefeko", "tagihin", http_client=http_client)
 
 
 def test_client_fixture_keeps_environment_active(client):

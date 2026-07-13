@@ -1,6 +1,10 @@
 import os
 
 
+CODEGUARD_APP_ID = "codeguard-ai"
+CODEGUARD_REPOSITORY_URL = f"https://github.com/ariefeko/{CODEGUARD_APP_ID}"
+
+
 def read_positive_float_env(name: str, default: float) -> float:
     """Read a positive numeric setting, falling back safely when invalid."""
     try:

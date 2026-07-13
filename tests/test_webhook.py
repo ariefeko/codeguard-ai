@@ -170,15 +170,26 @@ class TestExtractChangedFiles:
             MagicMock(status_code=200, json=MagicMock(return_value=second_page)),
         ]
 
-        with patch("src.api.webhook.httpx.get", side_effect=responses) as mock_get:
+        http_client = MagicMock()
+        http_client.get.side_effect = responses
+        with patch(
+            "src.api.webhook.get_github_http_client",
+            return_value=http_client,
+        ):
             result = webhook.extract_changed_files("pull_request", payload)
 
         assert "src/file_0.py" in result
         assert "src/final.py" in result
         assert "src/deleted.py" not in result
-        assert mock_get.call_count == 2
-        assert mock_get.call_args_list[0].kwargs["params"] == {"per_page": 100, "page": 1}
-        assert mock_get.call_args_list[1].kwargs["params"] == {"per_page": 100, "page": 2}
+        assert http_client.get.call_count == 2
+        assert http_client.get.call_args_list[0].kwargs["params"] == {
+            "per_page": 100,
+            "page": 1,
+        }
+        assert http_client.get.call_args_list[1].kwargs["params"] == {
+            "per_page": 100,
+            "page": 2,
+        }
 
     def test_stops_pr_file_pagination_at_configured_limit(self, monkeypatch):
         monkeypatch.setenv("GITHUB_PAT_TOKEN", "token")
@@ -202,12 +213,17 @@ class TestExtractChangedFiles:
             ]
             return MagicMock(status_code=200, json=MagicMock(return_value=files))
 
-        with patch("src.api.webhook.httpx.get", side_effect=full_page) as mock_get:
+        http_client = MagicMock()
+        http_client.get.side_effect = full_page
+        with patch(
+            "src.api.webhook.get_github_http_client",
+            return_value=http_client,
+        ):
             result = webhook.extract_changed_files("pull_request", payload)
 
-        assert mock_get.call_count == webhook.GITHUB_PR_FILES_MAX_PAGES
+        assert http_client.get.call_count == webhook.GITHUB_PR_FILES_MAX_PAGES
         assert len(result) == 1_000
-        assert mock_get.call_args.kwargs["params"]["page"] == 10
+        assert http_client.get.call_args.kwargs["params"]["page"] == 10
 
     def test_skips_non_reviewable_pr_actions(self):
         payload = {

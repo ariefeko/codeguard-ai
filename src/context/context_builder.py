@@ -4,6 +4,7 @@ import base64
 import os
 import httpx
 from src.config import HTTP_REQUEST_TIMEOUT_SECONDS, SUPPORTED_EXTENSIONS, SKIP_DIRS
+from src.github.http_client import build_github_headers, get_github_http_client
 
 # Regex import per bahasa
 IMPORT_PATTERNS = {
@@ -64,7 +65,13 @@ IMPORT_PATTERNS = {
 
 
 class ContextBuilder:
-    def __init__(self, owner: str, repo: str, ref: str):
+    def __init__(
+        self,
+        owner: str,
+        repo: str,
+        ref: str,
+        http_client: httpx.Client | None = None,
+    ):
         """
         owner : GitHub username, e.g. "ariefeko"
         repo  : repo name, e.g. "tagihin"
@@ -74,11 +81,8 @@ class ContextBuilder:
         self.repo = repo
         self.ref = ref
         self.token = os.getenv("GITHUB_PAT_TOKEN")
-        self.headers = {
-            "Authorization": f"Bearer {self.token}",
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        }
+        self.headers = build_github_headers(self.token)
+        self.http_client = http_client or get_github_http_client()
         self.base_url = f"https://api.github.com/repos/{owner}/{repo}/contents"
         self._repo_tree_cache = None  # cache tree agar tidak fetch berulang
 
@@ -127,7 +131,7 @@ class ContextBuilder:
         """Fetch satu file dari GitHub API, return isi sebagai string."""
         url = f"{self.base_url}/{file_path}?ref={self.ref}"
         try:
-            response = httpx.get(
+            response = self.http_client.get(
                 url,
                 headers=self.headers,
                 timeout=HTTP_REQUEST_TIMEOUT_SECONDS,
@@ -159,7 +163,7 @@ class ContextBuilder:
 
         url = f"https://api.github.com/repos/{self.owner}/{self.repo}/git/trees/{self.ref}?recursive=1"
         try:
-            response = httpx.get(
+            response = self.http_client.get(
                 url,
                 headers=self.headers,
                 timeout=HTTP_REQUEST_TIMEOUT_SECONDS,

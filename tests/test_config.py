@@ -1,4 +1,11 @@
-from src.config import read_positive_float_env
+from src.config import CODEGUARD_APP_ID, CODEGUARD_REPOSITORY_URL, read_positive_float_env
+from src.utils.formatters import format_pr_comment
+
+
+def test_codeguard_identity_is_shared_with_formatter():
+    assert CODEGUARD_APP_ID == "codeguard-ai"
+    assert CODEGUARD_REPOSITORY_URL.endswith(f"/{CODEGUARD_APP_ID}")
+    assert CODEGUARD_REPOSITORY_URL in format_pr_comment("review")
 
 
 def test_reads_positive_timeout_from_environment(monkeypatch):
