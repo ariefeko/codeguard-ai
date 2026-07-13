@@ -12,7 +12,8 @@ from src.github.repo_policy import (
     RepositoryAllowlistNotConfiguredError,
     is_repo_allowed,
 )
-from src.worker.worker import get_queue, process_github_review
+from src.worker.redis_connection import get_queue
+from src.worker.worker import process_github_review
 
 
 router = APIRouter()

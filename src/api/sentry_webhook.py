@@ -6,7 +6,8 @@ from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 
 from src.agents.sentry_agent import SentryAgent
-from src.worker.worker import get_queue, get_redis_connection, process_sentry_job
+from src.worker.redis_connection import get_queue, get_redis_connection
+from src.worker.worker import process_sentry_job
 
 
 load_dotenv()

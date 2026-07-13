@@ -1,97 +1,24 @@
 import logging
 import os
 import re
-import redis
-from redis.backoff import ExponentialBackoff
-from redis.retry import Retry
 from rq import Worker, Queue
 from dotenv import load_dotenv
-from src.config import (
-    CODEGUARD_APP_ID,
-    REDIS_RETRY_ATTEMPTS,
-    REDIS_RETRY_BASE_DELAY_SECONDS,
-    REDIS_RETRY_MAX_DELAY_SECONDS,
-)
+from src.config import CODEGUARD_APP_ID
 from src.context.context_builder import ContextBuilder
 from src.orchestration.orchestrator import Orchestrator
 from src.github.github_client import GitHubClient
 from src.utils.formatters import format_pr_comment, format_bug_issue, format_bug_fallback_issue
+from src.worker.redis_connection import get_redis_connection
 
 load_dotenv()
 
 logger = logging.getLogger(__name__)
-REDIS_URL_SCHEMES = ("redis://", "rediss://", "unix://")
 REVIEW_ANALYSIS_FALLBACK_MESSAGE = "Error: all LLM providers failed."
 BLOCKING_SEVERITY_RE = re.compile(
     r"^\s*(?:[-*]\s*)?(?:#+\s*)?(?:\d+\.\s*)?(critical|high)\b"
     r"|\b(critical|high)\s+severity\b",
     re.IGNORECASE,
 )
-
-
-class RedisConfigurationError(RuntimeError):
-    """Sanitized Redis configuration failure safe for logs and tracebacks."""
-
-    MESSAGES = {
-        "invalid_url": (
-            "Redis connection URL is invalid. See the deployment documentation "
-            "for supported configuration formats."
-        ),
-        "missing": (
-            "Redis connection is not configured. See the deployment documentation "
-            "for supported Railway Redis settings."
-        ),
-    }
-
-    def __init__(self, reason: str):
-        self.reason = reason
-        super().__init__(self.MESSAGES.get(reason, "Redis configuration is invalid."))
-
-
-def get_redis_url() -> str:
-    for name in ("REDIS_URL", "REDIS_PRIVATE_URL", "REDIS_PUBLIC_URL"):
-        value = os.getenv(name)
-        if not value:
-            continue
-
-        value = value.strip()
-        if value.startswith(REDIS_URL_SCHEMES):
-            return value
-
-        raise RedisConfigurationError("invalid_url")
-
-    host = os.getenv("REDISHOST") or os.getenv("REDIS_HOST")
-    port = os.getenv("REDISPORT") or os.getenv("REDIS_PORT") or "6379"
-    password = os.getenv("REDISPASSWORD") or os.getenv("REDIS_PASSWORD")
-
-    if host:
-        # The constructed URL may contain the Redis password; never log it.
-        auth = f":{password}@" if password else ""
-        return f"redis://{auth}{host}:{port}"
-
-    raise RedisConfigurationError("missing")
-
-
-def get_redis_connection():
-    return redis.from_url(
-        get_redis_url(),
-        socket_connect_timeout=float(
-            os.getenv("REDIS_SOCKET_CONNECT_TIMEOUT_SECONDS", "5")
-        ),
-        socket_timeout=float(os.getenv("REDIS_SOCKET_TIMEOUT_SECONDS", "5")),
-        retry=Retry(
-            ExponentialBackoff(
-                cap=REDIS_RETRY_MAX_DELAY_SECONDS,
-                base=REDIS_RETRY_BASE_DELAY_SECONDS,
-            ),
-            retries=REDIS_RETRY_ATTEMPTS,
-        ),
-    )
-
-
-def get_queue(name: str = "codeguard") -> Queue:
-    conn = get_redis_connection()
-    return Queue(name, connection=conn)
 
 
 def has_blocking_findings(review_result: str) -> bool:

@@ -34,7 +34,8 @@ GitHub push/PR                 Sentry error
 | `src/api/webhook.py` | Thin router aggregator |
 | `src/api/github_webhook.py` | GitHub signature, event parsing, repository policy, and enqueueing |
 | `src/api/sentry_webhook.py` | Sentry verification, event parsing, deduplication, and enqueueing |
-| `src/worker` | Redis connection, RQ jobs, and output coordination |
+| `src/worker/redis_connection.py` | Redis URL policy, retry-enabled connections, and queue factory |
+| `src/worker/worker.py` | GitHub/Sentry job execution and worker process bootstrap |
 | `src/github` | GitHub HTTP client, repository policy, and shared connection pooling |
 | `src/context` | File filtering, GitHub content retrieval, and related-file discovery |
 | `src/orchestration` | Prompt construction, enrichment, provider fallback, and schema validation |
