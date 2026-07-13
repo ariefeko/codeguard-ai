@@ -30,8 +30,8 @@ def get_redis_url() -> str:
             return value
 
         raise ValueError(
-            f"{name} must start with one of {', '.join(REDIS_URL_SCHEMES)}. "
-            "Set it to the full Redis connection URL from Railway, not just host:port."
+            f"{name} is not a valid Redis connection URL. "
+            "See the deployment documentation for supported configuration formats."
         )
 
     host = os.getenv("REDISHOST") or os.getenv("REDIS_HOST")
@@ -44,8 +44,8 @@ def get_redis_url() -> str:
         return f"redis://{auth}{host}:{port}"
 
     raise RuntimeError(
-        "Redis connection is not configured. Set REDIS_URL to a full URL like "
-        "redis://default:<password>@<host>:<port> or connect a Railway Redis service."
+        "Redis connection is not configured. See the deployment documentation "
+        "for supported Railway Redis settings."
     )
 
 

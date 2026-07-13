@@ -144,6 +144,22 @@ class TestCreateIssue:
             result = client.create_issue("Test", "Body")
         assert result is False
 
+    def test_malformed_json_returns_false(self, client):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 201
+        mock_resp.json.side_effect = ValueError("invalid JSON")
+
+        with patch("httpx.post", return_value=mock_resp):
+            assert client.create_issue("Test", "Body") is False
+
+    def test_unexpected_json_shape_returns_false(self, client):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 201
+        mock_resp.json.return_value = ["not", "an", "object"]
+
+        with patch("httpx.post", return_value=mock_resp):
+            assert client.create_issue("Test", "Body") is False
+
 
 # ============================================================
 # post_pr_comment()
@@ -236,6 +252,22 @@ class TestGetOpenPrForBranch:
             result = client.get_open_pr_for_branch("feature/test")
         assert result is None
 
+    def test_malformed_json_returns_none(self, client):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.side_effect = ValueError("invalid JSON")
+
+        with patch("httpx.get", return_value=mock_resp):
+            assert client.get_open_pr_for_branch("feature/test") is None
+
+    def test_malformed_pr_shape_returns_none(self, client):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = [{"title": "missing number"}]
+
+        with patch("httpx.get", return_value=mock_resp):
+            assert client.get_open_pr_for_branch("feature/test") is None
+
 
 class TestGetDefaultBranch:
     def test_env_default_branch_overrides_repo_metadata(self, client, monkeypatch):
@@ -261,6 +293,24 @@ class TestGetDefaultBranch:
         monkeypatch.delenv("CODEGUARD_DEFAULT_BRANCH", raising=False)
         mock_resp = MagicMock()
         mock_resp.status_code = 500
+
+        with patch("httpx.get", return_value=mock_resp):
+            assert client.get_default_branch() == "main"
+
+    def test_malformed_json_falls_back_to_main(self, client, monkeypatch):
+        monkeypatch.delenv("CODEGUARD_DEFAULT_BRANCH", raising=False)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.side_effect = ValueError("invalid JSON")
+
+        with patch("httpx.get", return_value=mock_resp):
+            assert client.get_default_branch() == "main"
+
+    def test_unexpected_json_shape_falls_back_to_main(self, client, monkeypatch):
+        monkeypatch.delenv("CODEGUARD_DEFAULT_BRANCH", raising=False)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = ["not", "an", "object"]
 
         with patch("httpx.get", return_value=mock_resp):
             assert client.get_default_branch() == "main"

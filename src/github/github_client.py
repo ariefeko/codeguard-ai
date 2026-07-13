@@ -1,4 +1,6 @@
 import os
+from typing import Any
+
 import httpx
 from src.github.repo_policy import is_repo_allowed, is_valid_repo_name
 
@@ -20,6 +22,28 @@ class GitHubClient:
             "X-GitHub-Api-Version": "2022-11-28",
         }
         self.base_url = f"https://api.github.com/repos/{owner}/{repo}"
+
+    @staticmethod
+    def _parse_json_response(
+        response: httpx.Response,
+        expected_type: type,
+        operation: str,
+    ) -> Any | None:
+        """Parse a GitHub response without allowing malformed JSON to escape."""
+        try:
+            payload = response.json()
+        except (ValueError, UnicodeError):
+            print(f"[GitHubClient] Invalid JSON response while {operation}")
+            return None
+
+        if not isinstance(payload, expected_type):
+            print(
+                f"[GitHubClient] Unexpected JSON response type while {operation}: "
+                f"expected {expected_type.__name__}"
+            )
+            return None
+
+        return payload
 
     def set_commit_status(
         self,
@@ -67,8 +91,13 @@ class GitHubClient:
         try:
             response = httpx.get(self.base_url, headers=self.headers, timeout=10)
             if response.status_code == 200:
-                default_branch = response.json().get("default_branch")
-                if default_branch:
+                payload = self._parse_json_response(
+                    response,
+                    dict,
+                    "getting the default branch",
+                )
+                default_branch = payload.get("default_branch") if payload else None
+                if isinstance(default_branch, str) and default_branch:
                     print(f"[GitHubClient] Default branch: {default_branch}")
                     return default_branch
 
@@ -93,9 +122,21 @@ class GitHubClient:
                 timeout=10,
             )
             if response.status_code == 200:
-                prs = response.json()
+                prs = self._parse_json_response(
+                    response,
+                    list,
+                    "getting open pull requests",
+                )
+                if prs is None:
+                    return None
                 if prs:
-                    pr_number = prs[0]["number"]
+                    first_pr = prs[0]
+                    if not isinstance(first_pr, dict) or not isinstance(
+                        first_pr.get("number"), int
+                    ):
+                        print("[GitHubClient] Invalid pull request response shape")
+                        return None
+                    pr_number = first_pr["number"]
                     print(f"[GitHubClient] Found open PR #{pr_number} for branch: {owner}:{branch}")
                     return pr_number
                 else:
@@ -144,7 +185,17 @@ class GitHubClient:
         try:
             response = httpx.post(url, headers=self.headers, json=payload, timeout=10)
             if response.status_code == 201:
-                issue_url = response.json().get("html_url")
+                response_payload = self._parse_json_response(
+                    response,
+                    dict,
+                    "creating an issue",
+                )
+                if response_payload is None:
+                    return False
+                issue_url = response_payload.get("html_url")
+                if not isinstance(issue_url, str) or not issue_url:
+                    print("[GitHubClient] Invalid issue response shape")
+                    return False
                 print(f"[GitHubClient] Issue created: {issue_url} ✅")
                 return True
             else:

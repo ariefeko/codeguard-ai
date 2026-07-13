@@ -38,14 +38,29 @@ def test_get_redis_url_builds_from_host_port_password(monkeypatch):
 
 def test_get_redis_url_rejects_url_without_scheme(monkeypatch):
     clear_redis_env(monkeypatch)
-    monkeypatch.setenv("REDIS_URL", "redis.railway.internal:6379")
+    invalid_url = "not-redis://default:super-secret@redis.internal:6379"
+    monkeypatch.setenv("REDIS_URL", invalid_url)
 
     try:
         worker.get_redis_url()
     except ValueError as exc:
-        assert "must start with" in str(exc)
+        message = str(exc)
+        assert "not a valid Redis connection URL" in message
+        assert "super-secret" not in message
+        assert invalid_url not in message
     else:
         raise AssertionError("Expected ValueError")
+
+
+def test_missing_redis_configuration_message_has_no_credential_template(monkeypatch):
+    clear_redis_env(monkeypatch)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        worker.get_redis_url()
+
+    message = str(exc_info.value)
+    assert "password" not in message.lower()
+    assert "redis://" not in message
 
 
 def test_get_redis_connection_sets_socket_timeouts(monkeypatch):

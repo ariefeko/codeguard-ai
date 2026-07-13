@@ -22,10 +22,6 @@ Referensi: https://docs.sentry.io/organization/integrations/integration-platform
 import hashlib
 import hmac
 import os
-import re
-
-
-SENTRY_SIGNATURE_RE = re.compile(r"^[A-Fa-f0-9]{64}$")
 
 
 class SentryAgent:
@@ -43,21 +39,23 @@ class SentryAgent:
             print("[SentryAgent] SENTRY_CLIENT_SECRET tidak diset -- menolak request")
             return False
 
-        if not signature_header:
-            print("[SentryAgent] Tidak ada Sentry-Hook-Signature header")
-            return False
-
-        if not SENTRY_SIGNATURE_RE.fullmatch(signature_header):
-            print("[SentryAgent] Format Sentry-Hook-Signature tidak valid")
-            return False
-
         computed = hmac.new(
             secret.encode("utf-8"),
             raw_body,
             hashlib.sha256,
-        ).hexdigest()
+        ).hexdigest().encode("ascii")
 
-        return hmac.compare_digest(computed, signature_header)
+        provided = (signature_header or "").encode("utf-8")
+        has_expected_length = len(provided) == len(computed)
+        normalized = (provided + (b"\x00" * len(computed)))[: len(computed)]
+        matches = hmac.compare_digest(computed, normalized)
+
+        if not signature_header:
+            print("[SentryAgent] Tidak ada Sentry-Hook-Signature header")
+        elif not has_expected_length or not matches:
+            print("[SentryAgent] Sentry-Hook-Signature tidak valid")
+
+        return has_expected_length and matches
 
     def parse_error(self, payload: dict) -> dict | None:
         """
