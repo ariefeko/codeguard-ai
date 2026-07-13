@@ -7,6 +7,7 @@ from typing import Any
 import httpx
 from dotenv import load_dotenv
 
+from src.config import QDRANT_SYNC_TIMEOUT_SECONDS
 from src.rag.indexer import (
     IndexBundle,
     build_index_bundle,
@@ -33,7 +34,7 @@ class QdrantSyncClient:
         self,
         url: str | None = None,
         api_key: str | None = None,
-        timeout: float = 30,
+        timeout: float = QDRANT_SYNC_TIMEOUT_SECONDS,
     ):
         configured_url = url if url is not None else os.getenv("QDRANT_URL", "")
         self.url = configured_url.rstrip("/")

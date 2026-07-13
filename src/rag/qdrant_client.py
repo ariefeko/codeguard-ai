@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import httpx
+from src.config import HTTP_REQUEST_TIMEOUT_SECONDS
 
 
 @dataclass(frozen=True)
@@ -19,7 +20,7 @@ class QdrantRuntimeClient:
         self,
         url: str | None = None,
         api_key: str | None = None,
-        timeout: float = 10,
+        timeout: float = HTTP_REQUEST_TIMEOUT_SECONDS,
     ):
         configured_url = url if url is not None else os.getenv("QDRANT_URL", "")
         self.url = configured_url.rstrip("/")

@@ -13,6 +13,7 @@ from src.worker.worker import (
     process_sentry_job,
 )
 from src.agents.sentry_agent import SentryAgent
+from src.config import HTTP_REQUEST_TIMEOUT_SECONDS
 from src.github.repo_policy import (
     RepositoryAllowlistNotConfiguredError,
     is_repo_allowed,
@@ -184,7 +185,7 @@ def extract_changed_files(event_type: str, payload: dict) -> list[str]:
                 url,
                 headers=headers,
                 params={"per_page": GITHUB_PR_FILES_PER_PAGE, "page": page},
-                timeout=10,
+                timeout=HTTP_REQUEST_TIMEOUT_SECONDS,
             )
 
             if response.status_code != 200:

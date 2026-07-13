@@ -3,6 +3,7 @@ import os
 from typing import Any
 
 import httpx
+from src.config import HTTP_REQUEST_TIMEOUT_SECONDS
 from src.github.repo_policy import is_repo_allowed, is_valid_repo_name
 
 
@@ -104,7 +105,12 @@ class GitHubClient:
             payload["target_url"] = target_url
 
         try:
-            response = httpx.post(url, headers=self.headers, json=payload, timeout=10)
+            response = httpx.post(
+                url,
+                headers=self.headers,
+                json=payload,
+                timeout=HTTP_REQUEST_TIMEOUT_SECONDS,
+            )
             if response.status_code == 201:
                 print(f"[GitHubClient] Commit status set: {context}={state}")
                 return True
@@ -126,7 +132,11 @@ class GitHubClient:
             return env_branch
 
         try:
-            response = httpx.get(self.base_url, headers=self.headers, timeout=10)
+            response = httpx.get(
+                self.base_url,
+                headers=self.headers,
+                timeout=HTTP_REQUEST_TIMEOUT_SECONDS,
+            )
             if response.status_code == 200:
                 payload = self._parse_json_response(
                     response,
@@ -159,7 +169,7 @@ class GitHubClient:
                 url,
                 headers=self.headers,
                 params={"state": "open", "head": f"{owner}:{branch}"},
-                timeout=10,
+                timeout=HTTP_REQUEST_TIMEOUT_SECONDS,
             )
             if response.status_code == 200:
                 prs = self._parse_json_response(
@@ -208,7 +218,12 @@ class GitHubClient:
         url = f"{self.base_url}/issues/{pr_number}/comments"
         payload = {"body": body}
         try:
-            response = httpx.post(url, headers=self.headers, json=payload, timeout=10)
+            response = httpx.post(
+                url,
+                headers=self.headers,
+                json=payload,
+                timeout=HTTP_REQUEST_TIMEOUT_SECONDS,
+            )
             if response.status_code == 201:
                 print(f"[GitHubClient] Comment posted to PR #{pr_number} ✅")
                 return True
@@ -236,7 +251,12 @@ class GitHubClient:
             "labels": labels if labels is not None else ["codeguard-ai"],
         }
         try:
-            response = httpx.post(url, headers=self.headers, json=payload, timeout=10)
+            response = httpx.post(
+                url,
+                headers=self.headers,
+                json=payload,
+                timeout=HTTP_REQUEST_TIMEOUT_SECONDS,
+            )
             if response.status_code == 201:
                 response_payload = self._parse_json_response(
                     response,

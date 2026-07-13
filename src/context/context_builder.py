@@ -3,7 +3,7 @@ import re
 import base64
 import os
 import httpx
-from src.config import SUPPORTED_EXTENSIONS, SKIP_DIRS
+from src.config import HTTP_REQUEST_TIMEOUT_SECONDS, SUPPORTED_EXTENSIONS, SKIP_DIRS
 
 # Regex import per bahasa
 IMPORT_PATTERNS = {
@@ -127,7 +127,11 @@ class ContextBuilder:
         """Fetch satu file dari GitHub API, return isi sebagai string."""
         url = f"{self.base_url}/{file_path}?ref={self.ref}"
         try:
-            response = httpx.get(url, headers=self.headers, timeout=10)
+            response = httpx.get(
+                url,
+                headers=self.headers,
+                timeout=HTTP_REQUEST_TIMEOUT_SECONDS,
+            )
             if response.status_code == 200:
                 data = response.json()
                 content_b64 = data.get("content", "")
@@ -155,7 +159,11 @@ class ContextBuilder:
 
         url = f"https://api.github.com/repos/{self.owner}/{self.repo}/git/trees/{self.ref}?recursive=1"
         try:
-            response = httpx.get(url, headers=self.headers, timeout=10)
+            response = httpx.get(
+                url,
+                headers=self.headers,
+                timeout=HTTP_REQUEST_TIMEOUT_SECONDS,
+            )
             if response.status_code == 200:
                 self._repo_tree_cache = response.json().get("tree", [])
                 return self._repo_tree_cache

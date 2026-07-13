@@ -12,6 +12,7 @@ load_dotenv()
 
 REDIS_URL_SCHEMES = ("redis://", "rediss://", "unix://")
 CODEGUARD_STATUS_CONTEXT = "codeguard-ai"
+REVIEW_ANALYSIS_FALLBACK_MESSAGE = "Error: all LLM providers failed."
 BLOCKING_SEVERITY_RE = re.compile(
     r"^\s*(?:[-*]\s*)?(?:#+\s*)?(?:\d+\.\s*)?(critical|high)\b"
     r"|\b(critical|high)\s+severity\b",
@@ -127,6 +128,8 @@ def process_github_review(
         # Orchestration → LLM
         orchestrator = Orchestrator()
         result = orchestrator.review_code(context)
+        if result is None:
+            result = REVIEW_ANALYSIS_FALLBACK_MESSAGE
 
         print("\n[Worker] === LLM REVIEW RESULT ===")
         print(result)

@@ -1,5 +1,7 @@
 # pylint: disable=protected-access,redefined-outer-name
 import json
+from types import NoneType
+from typing import get_type_hints
 from unittest.mock import MagicMock, call, patch
 
 import pytest
@@ -9,6 +11,14 @@ from src.orchestration.orchestrator import (
     PROVIDER_CHAIN,
     Orchestrator,
 )
+from src.github.repo_policy import get_allowed_repos, is_repo_allowed
+
+
+def test_public_policy_and_orchestrator_functions_have_return_type_hints():
+    assert get_type_hints(get_allowed_repos)["return"] == set[str]
+    assert get_type_hints(is_repo_allowed)["return"] is bool
+    assert get_type_hints(Orchestrator.__init__)["return"] is NoneType
+    assert get_type_hints(Orchestrator.review_code)["return"] == str | None
 
 
 @pytest.fixture
@@ -43,12 +53,12 @@ class TestReviewFallbackChain:
             call("prompt", PROVIDER_CHAIN[1]),
         ]
 
-    def test_returns_error_message_when_all_providers_fail(self, orchestrator):
+    def test_returns_none_when_all_providers_fail(self, orchestrator):
         orchestrator._request = MagicMock(return_value=None)
 
         result = orchestrator._call_llm("prompt")
 
-        assert result == "Error: all providers failed."
+        assert result is None
         assert orchestrator._request.call_count == len(PROVIDER_CHAIN)
 
 

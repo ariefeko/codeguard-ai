@@ -7,6 +7,7 @@ Coverage:
 - post_pr_comment() -- success, HTTP error
 - get_open_pr_for_branch() -- ada PR, tidak ada PR, HTTP error
 """
+import os
 from unittest.mock import patch, MagicMock
 import logging
 
@@ -17,15 +18,16 @@ from src.github.repo_policy import RepositoryAllowlistNotConfiguredError
 
 
 @pytest.fixture
-def client():
-    with patch.dict(
-        "os.environ",
-        {
-            "GITHUB_PAT_TOKEN": "fake_token",
-            "CODEGUARD_ALLOWED_REPOS": "ariefeko/tagihin",
-        },
-    ):
-        return GitHubClient("ariefeko", "tagihin")
+def client(monkeypatch):
+    monkeypatch.setenv("GITHUB_PAT_TOKEN", "fake_token")
+    monkeypatch.setenv("CODEGUARD_ALLOWED_REPOS", "ariefeko/tagihin")
+    return GitHubClient("ariefeko", "tagihin")
+
+
+def test_client_fixture_keeps_environment_active(client):
+    assert client.token == "fake_token"
+    assert os.getenv("GITHUB_PAT_TOKEN") == "fake_token"
+    assert os.getenv("CODEGUARD_ALLOWED_REPOS") == "ariefeko/tagihin"
 
 
 def test_rejects_unallowed_repository(monkeypatch):

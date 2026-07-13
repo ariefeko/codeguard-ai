@@ -1,5 +1,8 @@
 import os
+from typing import Any
+
 import httpx
+from src.config import LLM_REQUEST_TIMEOUT_SECONDS
 from src.orchestration.prompts import build_code_review_prompt, build_bug_fix_prompt
 from src.orchestration.tavily_client import CodeGuardSearch
 from src.rag import RAGPipeline, RAGSnippet
@@ -48,17 +51,21 @@ MAX_TOKENS_STRUCTURED = MAX_TOKENS * 2
 
 
 class Orchestrator:
-    def __init__(self):
+    def __init__(self) -> None:
         self.search = CodeGuardSearch()
         self.rag = RAGPipeline()
 
-    def review_code(self, context: dict) -> str:
+    def review_code(self, context: dict[str, Any]) -> str | None:
         """Entry point untuk GitHub webhook — code review."""
         search_results = self._enrich_with_search(context)
         prompt = build_code_review_prompt(context, search_results)
         return self._call_llm(prompt)
 
-    def fix_bug(self, context: dict, error: dict) -> BugAnalysis | None:
+    def fix_bug(
+        self,
+        context: dict[str, Any],
+        error: dict[str, Any],
+    ) -> BugAnalysis | None:
         """
         Entry point untuk Sentry webhook — bug fix.
         Return None kalau semua provider gagal menghasilkan output yang
@@ -69,7 +76,7 @@ class Orchestrator:
         prompt = build_bug_fix_prompt(context, error, search_results)
         return self._call_llm_structured(prompt)
 
-    def _enrich_with_search(self, context: dict) -> dict:
+    def _enrich_with_search(self, context: dict[str, Any]) -> dict[str, str]:
         """Curated RAG first, then Tavily fallback based on file extension."""
         rag_context = self._format_rag_for_context(context)
         if rag_context:
@@ -77,7 +84,7 @@ class Orchestrator:
 
         return self._search_review_references(context)
 
-    def _search_review_references(self, context: dict) -> dict:
+    def _search_review_references(self, context: dict[str, Any]) -> dict[str, str]:
         results = {}
 
         for file_path in context.get("changed_files", {}).keys():
@@ -102,7 +109,11 @@ class Orchestrator:
 
         return {k: v for k, v in results.items() if v}
 
-    def _search_for_error(self, error: dict, context: dict | None = None) -> dict:
+    def _search_for_error(
+        self,
+        error: dict[str, Any],
+        context: dict[str, Any] | None = None,
+    ) -> dict[str, str]:
         """Curated RAG first, then Tavily fallback for Sentry error context."""
         rag_context = self._format_rag_for_error(error, context or {})
         if rag_context:
@@ -116,7 +127,7 @@ class Orchestrator:
             )
         return {k: v for k, v in results.items() if v}
 
-    def _format_rag_for_context(self, context: dict) -> str:
+    def _format_rag_for_context(self, context: dict[str, Any]) -> str:
         try:
             snippets = self.rag.retrieve_for_context(context)
             return self._format_rag_snippets(snippets)
@@ -124,7 +135,11 @@ class Orchestrator:
             print(f"[RAG] Review enrichment failed: {type(exc).__name__}")
             return ""
 
-    def _format_rag_for_error(self, error: dict, context: dict) -> str:
+    def _format_rag_for_error(
+        self,
+        error: dict[str, Any],
+        context: dict[str, Any],
+    ) -> str:
         try:
             snippets = self.rag.retrieve_for_error(error, context)
             return self._format_rag_snippets(snippets)
@@ -137,7 +152,7 @@ class Orchestrator:
             return ""
         return self.rag.format_prompt_snippets(snippets).strip()
 
-    def _call_llm(self, prompt: str) -> str:
+    def _call_llm(self, prompt: str) -> str | None:
         """Kirim prompt ke provider dengan fallback chain. Dipakai review_code()."""
         for provider in PROVIDER_CHAIN:
             print(f"[Orchestrator] Trying: {provider['name']}")
@@ -147,7 +162,7 @@ class Orchestrator:
                 return result
             print(f"[Orchestrator] Failed: {provider['name']}, trying next...")
 
-        return "Error: all providers failed."
+        return None
 
     def _call_llm_structured(self, prompt: str) -> BugAnalysis | None:
         """
@@ -178,7 +193,13 @@ class Orchestrator:
         print("[Orchestrator] All providers failed structured validation.")
         return None
 
-    def _request(self, prompt: str, provider: dict, json_mode: bool = False, max_tokens: int = MAX_TOKENS) -> str | None:
+    def _request(
+        self,
+        prompt: str,
+        provider: dict[str, str],
+        json_mode: bool = False,
+        max_tokens: int = MAX_TOKENS,
+    ) -> str | None:
         """
         Satu request ke provider. Return None kalau gagal.
         json_mode=True menambahkan response_format: json_object -- dipakai
@@ -213,7 +234,7 @@ class Orchestrator:
                 provider["url"],
                 headers=headers,
                 json=payload,
-                timeout=60,
+                timeout=LLM_REQUEST_TIMEOUT_SECONDS,
             )
 
             if response.status_code == 200:
