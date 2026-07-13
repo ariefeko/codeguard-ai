@@ -1,514 +1,278 @@
 # CodeGuard AI — Implementation Progress
 
-> Step-by-step engineering log. Updated per session.
+> Implementation status based on the `develop` branch as of July 13, 2026.
+> Last verified at commit `115040a` (`TTL knowledge updater`).
 
 ---
 
-## Project Structure (Current)
+## Status Summary
 
-```text
-codeguard-ai/
-├── src/
-│   ├── agents/
-│   │   └── sentry_agent.py        # File scanner engine
-│   ├── api/
-│   │   ├── main.py                # FastAPI app entry point
-│   │   └── webhook.py             # Webhook route handlers
-│   ├── context/
-│   │   └── context_builder.py     # GitHub API file fetcher + dependency resolver
-│   ├── github/
-│   │   └── github_client.py       # GitHub API wrapper (PR comment, Issue)
-│   ├── orchestration/
-│   │   ├── orchestrator.py        # LLM orchestration + fallback chain
-│   │   └── prompts.py             # Prompt templates per analysis type
-│   ├── rag/
-│   │   └── __init__.py            # Placeholder — RAG pipeline (not yet implemented)
-│   ├── utils/
-│   │   └── __init__.py            # Placeholder
-│   └── config.py                  # Single source of truth: extensions, skip dirs
-├── tests/
-│   ├── conftest.py
-│   └── __init__.py
-├── .env                           # API keys (not committed)
-├── .env.example
-├── .gitignore
-├── .pylintrc
-├── docker-compose.yml
-├── Procfile                       # Railway deploy config
-├── requirements.txt
-└── README.md
-```
+CodeGuard AI now has a complete primary workflow for receiving GitHub and Sentry
+webhooks, processing analyses asynchronously, enriching prompts with RAG or
+Tavily, running the LLM fallback chain, and sending results back to GitHub.
+
+| Phase | Status | Main outcome |
+|---|---|---|
+| 1–8 — Core MVP | ✅ Complete | Scanner, API, GitHub webhook, context builder, orchestration, and GitHub output |
+| 9–11 — Deployment and async processing | ✅ Implemented | Railway/Docker workflow, Tavily enrichment, Redis + RQ worker |
+| 12 — Sentry integration | ✅ Complete | HMAC, error parsing, Redis deduplication, structured bug analysis, GitHub Issue fallback |
+| 13 — Tests and hardening | ✅ Complete | Webhook validation, schema validation, provider fallback, commit status checks, 145 tests |
+| 14.1–14.6 — RAG MVP runtime | ✅ Complete | Topic mapper, read-only retrieval, prompt integration, safety tests, curated seed |
+| 14.7 — Qdrant Cloud wiring | 🟡 Implemented; operational check required | Client and smoke diagnostics are available; Railway environment and cloud E2E flow still require verification |
+| 14.8 — Indexer and sync | ✅ Complete locally | Indexer, safe dry-run, target check, and explicit remote execution |
+| 14.9 — TTL/hash updater | ✅ Complete locally | Refresh planner, TTL/hash comparison, quality gate, and explicit write mode |
+
+Overall status: **The MVP is active; local RAG implementation is complete, while
+cloud activation still requires operational validation.**
 
 ---
 
-## Phase 1 — Foundation
+## Current Architecture
 
-### Python Environment
-
-- Python 3.12 + `.venv` initialized
-- `requirements.txt` configured
-- Git repository initialized
-
-### Project Structure
-
-- `src/`, `tests/`, `docs/` directories created
-- `src/__init__.py` per module
-
-### `src/config.py` — Single Source of Truth
-
-Centralized constants used across all modules:
-
-```python
-SUPPORTED_EXTENSIONS = {
-    ".py", ".js", ".ts", ".php", ".java", ".go",
-    ".cs", ".razor", ".cshtml"
-}
-
-SKIP_DIRS = {
-    "node_modules", "vendor", "core", ".git",
-    ".venv", "__pycache__", "dist", "build",
-    "coverage", ".next", ".nuxt", "migrations",
-    "storage", "bootstrap/cache"
-}
-
-SKIP_FILES = { "__init__.py", "conftest.py" }
+```text
+GitHub PR/push                 Sentry error
+      |                             |
+      +-------- FastAPI webhook ----+
+                    |
+          signature + payload validation
+                    |
+              Redis / RQ queue
+                    |
+                 Worker
+                    |
+             Context Builder
+                    |
+               Orchestrator
+          +---------+----------+
+          |                    |
+   Curated RAG/Qdrant     Tavily fallback
+          +---------+----------+
+                    |
+          OpenAgentic/Groq fallback
+                    |
+      +-------------+-------------+
+      |                           |
+ PR comment + commit status   GitHub bug issue
 ```
 
-Previously each module had its own duplicate constants (`IGNORE_DIRS`, `ANALYZABLE_EXTENSIONS`). Refactored to single import:
-
-```python
-from src.config import SUPPORTED_EXTENSIONS, SKIP_DIRS
-```
+RAG remains optional. If it is disabled, not configured, or Qdrant fails, the
+analysis continues with Tavily or the standard prompt.
 
 ---
 
-## Phase 2 — Scanner Engine
+## Completed Implementation
 
-### `src/agents/sentry_agent.py`
+### Core review and GitHub integration
 
-```text
-SentryAgent(project_path)
-  ├── collect_files()     → rglob project, filter by SUPPORTED_EXTENSIONS + SKIP_DIRS
-  ├── read_file()         → read single file as string
-  └── read_files()        → read all collected files, return dict {path: content}
-```
+- The scanner supports Python, JavaScript/TypeScript, PHP, Java, Go, C#, Razor,
+  Twig, and C++, with centralized directory and file filtering in
+  `src/config.py`.
+- The GitHub webhook supports `push` and `pull_request` events (`opened` and
+  `synchronize`), including PR file pagination.
+- The GitHub webhook is protected by HMAC SHA-256 and a repository allowlist.
+- Malformed payloads, invalid signatures, and unauthorized repositories are
+  rejected before a job is created.
+- `ContextBuilder` retrieves changed and related files through the GitHub API.
+- Reviews are processed by an RQ worker, allowing the webhook to return HTTP 202.
+- The worker publishes `pending`, `success`, `failure`, or `error` commit statuses.
+- Review results are posted as PR comments; a GitHub Issue is used when no open
+  PR is available.
 
-Originally had local `IGNORE_DIRS` / `SUPPORTED_EXTENSIONS` — refactored to import from `src/config.py`.
+### LLM orchestration and enrichment
 
-`extract_dependencies()` and `find_related_files()` stubs present — dependency logic moved to `ContextBuilder`.
+- The provider fallback chain is active through OpenAgentic and Groq.
+- PR reviews use text output, while Sentry bug analysis uses structured JSON
+  output validated against the `BugAnalysis` schema.
+- LLM envelope and output parsing are centralized for consistent behavior across
+  providers.
+- Tavily provides real-time security and best-practice references.
+- Curated RAG is attempted first; Tavily is used when RAG returns no results or
+  fails.
 
----
+### Sentry bug agent
 
-## Phase 3 — API Layer
+- `Sentry-Hook-Signature` is verified against the raw request body.
+- Irrelevant events and resources are skipped safely.
+- Stack traces are mapped to source files to build the analysis context.
+- `issue_id` values are deduplicated through Redis with a pending lock and TTL.
+- Valid analyses create GitHub Issues labeled `bug` and `ai-analyzed`.
+- If every provider or schema validation attempt fails, the worker still creates
+  a manual fallback Issue labeled `needs-manual-review`.
 
-### `src/api/main.py` — FastAPI Entry Point
+### Deployment and reliability
 
-```python
-from dotenv import load_dotenv
-load_dotenv()  # must be called before all other imports
-
-app = FastAPI()
-app.include_router(router)
-
-@app.get("/health")
-def health():
-    return {"status": "ok"}
-```
-
-Key lesson: `load_dotenv()` must be at the top of `main.py` — not in `webhook.py` — otherwise environment variables are not available when FastAPI starts.
-
-### `src/api/webhook.py` — Webhook Handlers
-
-```text
-POST /webhook/github  → handle push + pull_request events
-POST /webhook/sentry  → receive Sentry error payload (print only, not yet processed)
-```
-
----
-
-## Phase 4 — GitHub Webhook Integration
-
-### ngrok Setup
-
-```bash
-ngrok config add-authtoken YOUR_TOKEN
-ngrok http 8000
-# → https://xxxx.ngrok-free.app
-```
-
-Expose local FastAPI to the internet. URL changes on every restart — update GitHub webhook settings accordingly.
-
-### tmux Workflow
-
-```bash
-tmux new -s codeguard
-
-# Panel 1 (Ctrl+B %)
-uvicorn src.api.main:app --reload --port 8000
-
-# Panel 2
-ngrok http 8000
-
-# Detach
-Ctrl+B D
-
-# Reattach
-tmux attach -t codeguard
-```
-
-### GitHub Webhook Connected
-
-Configured on repo **Tagihin** (demo app — TALL stack Laravel):
-
-```text
-Payload URL : https://xxxx.ngrok-free.app/webhook/github
-Content type: application/json
-Events      : Pushes + Pull requests
-```
-
-### `extract_changed_files()` — Parse Push + PR Payload
-
-**Push event** — files extracted from commit payload:
-
-```python
-commits = payload.get("commits", [])
-for commit in commits:
-    files.update(commit.get("added", []))
-    files.update(commit.get("modified", []))
-```
-
-**Pull request event** — files fetched via GitHub API (not in payload directly):
-
-```python
-url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}/files"
-for f in response.json():
-    if f.get("status") != "removed":
-        files.add(f["filename"])
-```
-
-### `extract_branch()` — Detect Branch from Payload
-
-```python
-# Push event
-ref = payload.get("ref", "")  # "refs/heads/develop"
-branch = ref.replace("refs/heads/", "")
- 
-# Pull request event
-branch = payload["pull_request"]["head"]["ref"]
-```
+- The Dockerfile, Procfile, and port configuration support Railway deployment.
+- Redis URLs support Railway configuration through `REDIS_URL`, private/public
+  URLs, or host/port/password components, with connection timeouts.
+- Webhook, worker, GitHub client, prompt, schema, and RAG paths have mock-based
+  tests that do not require paid or external services during unit testing.
 
 ---
 
-## Phase 5 — Context Builder
+## Phase 14 — RAG Pipeline
 
-### `src/context/context_builder.py`
+### 14.1–14.6: runtime MVP — complete
 
-```text
-ContextBuilder(owner, repo, ref)
-  ├── build(changed_files)       → entry point, returns context dict
-  ├── _filter(files)             → remove non-code files (.md, .blade.php, etc.)
-  ├── _fetch_file(path)          → GitHub API GET /contents/{path}?ref={sha}
-  ├── _fetch_files(files)        → fetch multiple files
-  ├── _get_repo_tree()           → fetch full repo tree once, cache result
-  ├── extract_dependencies()     → regex per language to find imports
-  ├── find_related_files()       → resolve imports to actual file paths
-  ├── _resolve_dep()             → language-specific resolution logic
-  └── _search_file_in_tree()     → search cached tree by filename + extension
-```
+- The runtime contract is strictly separated from indexing and update paths.
+- `TopicMapper` deterministically selects the language, framework, category,
+  topics, and collections for PR and Sentry contexts.
+- `QdrantRuntimeClient` only performs read/filter queries; no embedding, upsert,
+  or delete operation occurs in the production request path.
+- `RAGPipeline` limits results, applies the minimum confidence threshold, formats
+  concise snippets, and handles failures without stopping the analysis.
+- The orchestrator injects RAG snippets into review and bug-analysis prompts.
+- The curated seed contains **19 documents** for PHP/Laravel, Python/FastAPI,
+  JavaScript/Node.js, and general code quality.
+- Each seed document has validated topic/category/language/framework, source, and
+  confidence metadata; the indexer adds TTL, timestamp, and content hash fields
+  to the point bundle.
 
-**Output format:**
+### 14.7: Qdrant Cloud wiring — operational validation required
 
-```python
-{
-    "changed_files": {
-        "app/Http/Controllers/ProfileController.php": "<?php ..."
-    },
-    "related_files": {
-        "app/Http/Requests/ProfileUpdateRequest.php": "<?php ..."
-    }
-}
-```
+Available now:
 
-**Import patterns supported (regex per language):**
+- Environment contract: `QDRANT_URL`, `QDRANT_API_KEY`, `RAG_ENABLED`,
+  `RAG_MAX_RESULTS`, and `RAG_MIN_CONFIDENCE`.
+- Read-only smoke command: `python -m src.rag.qdrant_smoke`.
+- Structured logs: `rag_query_started`, `rag_query_succeeded`, and
+  `rag_query_failed`.
 
-```text
-PHP    → use App\Services\InvoiceService;
-Python → from services.invoice import InvoiceService
-JS/TS  → import { X } from './services/invoice'
-Java   → import com.app.services.InvoiceService;
-Go     → import "github.com/app/services"
-C#     → using MyApp.Services;
-Razor  → @using MyApp.Services / @inject
-```
+Still to be verified in the external environment:
 
-**GitHub API used:**
+- The Railway worker has all required RAG variables configured correctly.
+- Qdrant Cloud contains the seven collections produced by the seed sync.
+- At least one PR or Sentry event successfully retrieves a RAG snippet in an E2E
+  test.
 
-```text
-GET /repos/{owner}/{repo}/contents/{path}?ref={sha}  → fetch file content (base64)
-GET /repos/{owner}/{repo}/git/trees/{ref}?recursive=1 → fetch full repo tree (cached)
-```
+### 14.8: local indexer and sync — complete locally
 
-**Key design decision:** ContextBuilder fetches files from GitHub API, not local disk. This means CodeGuard AI works from anywhere — no need to clone the target repo.
+- `python -m src.rag.indexer` validates and prepares the point bundle.
+- `python -m src.rag.sync` is safe by default and only displays a dry-run plan.
+- `--check-target` only reads the target state.
+- `--execute` is explicitly required to create collections or upsert points into
+  Qdrant Cloud.
+- The MVP uses metadata/filter retrieval with a one-dimensional placeholder
+  vector; semantic embedding is not yet a runtime dependency.
 
----
+### 14.9: TTL/hash updater — complete locally
 
-## Phase 6 — Orchestration + LLM
-
-### `src/orchestration/prompts.py`
-
-Two prompt builders:
-
-```python
-build_code_review_prompt(context)  # GitHub webhook → code review
-build_bug_fix_prompt(context, error)  # Sentry webhook → bug fix (not yet used)
-```
-
-**Line numbers added to file content:**
-
-```python
-def add_line_numbers(content: str) -> str:
-    lines = content.splitlines()
-    return "\n".join(f"{i:4d} | {line}" for i, line in enumerate(lines, start=1))
-```
-
-Without line numbers, LLM guesses positions inaccurately. Adding them ensures LLM reports exact line numbers matching the actual file.
-
-### `src/orchestration/orchestrator.py`
-
-```text
-Orchestrator
-  ├── review_code(context)   → build prompt → _call_llm()
-  ├── fix_bug(context, error) → build prompt → _call_llm() (not yet wired)
-  ├── _call_llm(prompt)      → iterate MODEL_CHAIN until success
-  └── _request(prompt, model) → POST to OpenRouter API
-```
-
-**Fallback chain:**
-
-```python
-MODEL_CHAIN = [
-    "deepseek/deepseek-v4-flash",
-    "google/gemini-3-flash-preview",
-    "meta-llama/llama-4-maverick:free",
-    "qwen/qwen3.7-max",
-    "deepseek/deepseek-v4-pro",
-]
-```
-
-All models accessed via **OpenRouter** — single API key, automatic fallback if a model is unavailable or rate-limited.
+- `python -m src.rag.updater` builds a refresh plan without changing files.
+- Fresh topics are skipped until their TTL expires.
+- Expired topics can be refreshed from approved local updates and/or Tavily.
+- Unchanged content only updates timestamp metadata.
+- Changed content is marked for re-indexing and synchronization.
+- The quality gate rejects invalid refresh sources or content.
+- Seed changes only occur through `--write`; the updater does not run in the
+  production PR/Sentry request path.
 
 ---
 
-## Phase 7 — GitHub Output
+## Latest Verification
 
-### `src/github/github_client.py`
-
-```text
-GitHubClient(owner, repo)
-  ├── get_open_pr_for_branch(branch)  → GET /pulls?state=open&head={owner}:{branch}
-  ├── post_pr_comment(pr_number, body) → POST /issues/{pr}/comments
-  └── create_issue(title, body)        → POST /issues (fallback if no open PR)
-```
-
-**PAT token permissions required:**
+Performed on July 13, 2026:
 
 ```text
-Contents      → Read-only   (fetch files)
-Pull requests → Read and write  (post PR comment)
-Issues        → Read and write  (create issue)
-Metadata      → Read-only   (auto)
+.venv/bin/pytest -q
+145 passed in 0.56s
+
+.venv/bin/python -m src.rag.indexer
+19 points; 7 collections; dry-run successful
+
+.venv/bin/python -m src.rag.sync
+19 points planned; 0 upserted; dry-run successful
+
+.venv/bin/python -m src.rag.updater
+19 expired_no_refresh; requires_reindex=false; dry-run successful
 ```
 
-### `format_pr_comment()` — PR Comment Template
-
-```python
-def format_pr_comment(review_result: str) -> str:
-    return f"""## 🤖 CodeGuard AI Review
-
-{review_result}
+Updater note: all seed documents currently exceed their TTL, but the dry-run was
+not given a refresh provider or new content. Therefore, `expired_no_refresh` is
+the expected result, and the seed remains unchanged.
 
 ---
-*Generated by [CodeGuard AI](https://github.com/ariefeko/codeguard-ai)*"""
+
+## Current Project Structure
+
+```text
+src/
+├── agents/sentry_agent.py
+├── api/
+│   ├── main.py
+│   └── webhook.py
+├── context/context_builder.py
+├── github/
+│   ├── github_client.py
+│   └── repo_policy.py
+├── orchestration/
+│   ├── orchestrator.py
+│   ├── prompts.py
+│   ├── schemas.py
+│   └── tavily_client.py
+├── rag/
+│   ├── indexer.py
+│   ├── knowledge_base.py
+│   ├── qdrant_client.py
+│   ├── qdrant_smoke.py
+│   ├── rag_pipeline.py
+│   ├── sync.py
+│   ├── topic_mapper.py
+│   ├── updater.py
+│   └── seeds/mvp_seed.json
+├── utils/formatters.py
+└── worker/worker.py
+
+tests/
+├── test_github_client.py
+├── test_orchestrator.py
+├── test_prompts.py
+├── test_rag_indexer_sync.py
+├── test_rag_runtime.py
+├── test_rag_seed.py
+├── test_rag_updater.py
+├── test_sentry_agent.py
+├── test_topic_mapper.py
+├── test_webhook.py
+└── test_worker.py
 ```
 
 ---
 
-## Phase 8 — End-to-End Flow (Confirmed Working)
+## Next Priorities
 
-```text
-git push / open PR (Tagihin repo)
-  → GitHub sends POST to /webhook/github
-    → extract_changed_files()
-      → filter non-code files
-        → ContextBuilder.build(changed_files)
-          → _fetch_files() via GitHub API
-          → find_related_files() via repo tree cache
-            → Orchestrator.review_code(context)
-              → build_code_review_prompt() with line numbers
-                → OpenRouter → DeepSeek V4 Flash
-                  → GitHubClient.get_open_pr_for_branch()
-                    → post_pr_comment() ✅
-                    → fallback: create_issue() if no open PR
-```
-
-**Verified with real push to Tagihin:**
-- Changed files extracted correctly ✅
-- Related files resolved (ProfileUpdateRequest.php, LoginRequest.php) ✅
-- LLM detected real bugs (dd() statements, SQL injection, hardcoded secrets) ✅
-- Line numbers accurate ✅
-- PR comment posted to GitHub ✅
-
----
-
-## Connect CodeGuard AI to Any Repo
-
-Zero setup on the target repo. Two steps only:
-
-**Step 1 — Add GitHub webhook on target repo:**
-
-```text
-Settings → Webhooks → Add webhook
-Payload URL : https://your-codeguard-url/webhook/github
-Content type: application/json
-Events      : Pushes + Pull requests
-```
-
-**Step 2 — Grant PAT token access:**
-
-```text
-GitHub → Settings → Developer settings →
-Personal access tokens → Fine-grained tokens →
-codeguard-ai token → Edit →
-Repository access → add target repo
-
-Permissions: Contents (read), Pull requests (write), Issues (write)
-```
-
-CodeGuard AI reads all files via GitHub API — no cloning, no local access required.
+1. Run `python -m src.rag.sync --check-target` against Qdrant Cloud.
+2. Review the dry-run, then run `python -m src.rag.sync --execute` only after the
+   target and remote-write risk have been approved.
+3. Enable `RAG_ENABLED=true` on the Railway worker and run the smoke query.
+4. Test one PR and one Sentry event E2E; verify retrieval logs and GitHub output
+   when RAG succeeds and when it fails.
+5. Prepare approved refresh content for the 19 seed documents whose TTL has
+   expired, then review the updater plan before using `--write` and syncing again.
+6. After RAG operations are stable, introduce semantic retrieval and embedding as
+   a separate enhancement rather than a required runtime dependency.
 
 ---
 
 ## Environment Variables
 
-```bash
-# Required
-GITHUB_PAT_TOKEN=github_pat_xxxx    # Fine-grained PAT
-OPENROUTER_API_KEY=sk-or-xxxx       # openrouter.ai
-
-# Optional (future)
-# SENTRY_WEBHOOK_SECRET=xxxx
-# REDIS_URL=xxxx
-```
-
----
-
-## Local Development
-
-```bash
-# Start FastAPI
-uvicorn src.api.main:app --reload --port 8000
-
-# Expose to internet (required for GitHub webhook)
-ngrok http 8000
-
-# Recommended: run both in tmux
-tmux new -s codeguard
-```
-
----
-
-## Next Steps
-
-### Roadmap (in order)
-
 ```text
-⬜ Phase 9  — Railway Deploy
-             Production hosting, public URL, no more ngrok
- 
-⬜ Phase 10 — Redis Queue Bridge
-             Async processing, instant 202 response, worker pattern
- 
-⬜ Phase 11 — Sentry Webhook Integration
-             Extract error context → wire to fix_bug()
-             Output: GitHub Issue + Auto Fix PR (human-in-the-loop)
- 
-⬜ Phase 12 — Tavily Web Search Integration
-             Real-time security advisories + best practices
-             LLM findings backed by external sources
- 
-⬜ Phase 13 — pytest + Mock LLM
-             Test suite without real API calls, no billing
- 
-⬜ Phase 14 — RAG Pipeline (Phase 2)
-             LangChain + Qdrant + nomic-embed-text
-             Internal knowledge base + organization coding standards
+# Core
+GITHUB_PAT_TOKEN
+GITHUB_WEBHOOK_SECRET
+CODEGUARD_ALLOWED_REPOS
+REDIS_URL
+OPENAGENTIC_API_KEY
+GROQ_API_KEY
+
+# Sentry and enrichment
+SENTRY_CLIENT_SECRET
+TAVILY_API_KEY
+
+# Optional RAG
+QDRANT_URL
+QDRANT_API_KEY
+RAG_ENABLED=false
+RAG_MAX_RESULTS=5
+RAG_MIN_CONFIDENCE=0.65
 ```
 
----
-
-### Future Architecture (with Tavily + RAG)
-
-```text
-GitHub PR / Sentry Error
-    ↓
-FastAPI Webhook
-    ↓
-Redis Queue
-    ↓
-Worker
-    ↓
-Context Builder
-    ↓
-Orchestration
-    ├── Local Context (changed files + related files)
-    ├── Tavily Search (CVE, security advisories, best practices)
-    └── RAG Knowledge Base (Phase 2 — LangChain + Qdrant)
-    ↓
-OpenRouter → LLM Fallback Chain
-    ↓
-Output
-    ├── PR Comment (GitHub webhook)
-    └── GitHub Issue + Auto Fix PR (Sentry webhook)
-    ↓
-Human Review Gate (approve / reject / modify)
-```
-
----
-
-### Why Tavily Before RAG?
-
-Currently CodeGuard AI can only analyze:
-
-```text
-- Source code
-- Changed files
-- Related files
-- Dependency relationships
-```
-
-With Tavily, CodeGuard AI can additionally search:
-
-```text
-- CVE databases
-- Package vulnerabilities (Composer, npm, pip)
-- Framework security advisories (Laravel, Symfony, Drupal)
-- OWASP recommendations
-- Latest best practices per language/framework
-```
-
-**Example:**
-
-```text
-Detected: symfony/http-foundation 6.4.x
- 
-Tavily searches:
-  "symfony http-foundation 6.4 vulnerability"
-  "symfony security advisory 2025"
- 
-Result: PR comment includes real CVE references,
-not just LLM training data (which may be outdated)
-```
-
-RAG requires significantly more setup (embedding pipeline, vector DB, chunking strategy, retrieval tuning) — Tavily delivers immediate value in one API call.
-
----
+Never commit secrets or the `.env` file to the repository.
