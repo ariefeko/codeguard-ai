@@ -8,8 +8,12 @@ Coverage:
 - get_open_pr_for_branch() -- ada PR, tidak ada PR, HTTP error
 """
 from unittest.mock import patch, MagicMock
+import logging
+
+import httpx
 import pytest
 from src.github.github_client import GitHubClient
+from src.github.repo_policy import RepositoryAllowlistNotConfiguredError
 
 
 @pytest.fixture
@@ -38,6 +42,16 @@ def test_rejects_invalid_repository_name_format(monkeypatch):
 
     with pytest.raises(ValueError):
         GitHubClient("ariefeko", "bad repo")
+
+
+def test_reports_missing_repository_allowlist(monkeypatch):
+    monkeypatch.setenv("GITHUB_PAT_TOKEN", "fake_token")
+    monkeypatch.delenv("CODEGUARD_ALLOWED_REPOS", raising=False)
+    monkeypatch.delenv("CODEGUARD_DEFAULT_OWNER", raising=False)
+    monkeypatch.delenv("CODEGUARD_DEFAULT_REPO", raising=False)
+
+    with pytest.raises(RepositoryAllowlistNotConfiguredError):
+        GitHubClient("ariefeko", "tagihin")
 
 
 class TestSetCommitStatus:
@@ -83,6 +97,18 @@ class TestSetCommitStatus:
 
         with patch("httpx.post", return_value=mock_resp):
             assert client.set_commit_status("abc123", "success", "ok") is False
+
+    def test_authentication_failure_is_classified_in_log(self, client, caplog):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 401
+        mock_resp.headers = {}
+
+        with caplog.at_level(logging.WARNING), patch("httpx.post", return_value=mock_resp):
+            assert client.set_commit_status("abc123", "success", "ok") is False
+
+        record = next(record for record in caplog.records if record.name == "src.github.github_client")
+        assert record.github_error_category == "authentication"
+        assert record.status_code == 401
 
 
 # ============================================================
@@ -140,9 +166,16 @@ class TestCreateIssue:
 
     def test_exception_returns_false(self, client):
         """Network error atau exception lain harus return False, bukan crash."""
-        with patch("httpx.post", side_effect=Exception("Connection error")):
+        with patch("httpx.post", side_effect=httpx.RequestError("Connection error")):
             result = client.create_issue("Test", "Body")
         assert result is False
+
+    def test_unexpected_exception_is_not_swallowed(self, client):
+        with patch("httpx.post", side_effect=RuntimeError("programming error")), pytest.raises(
+            RuntimeError,
+            match="programming error",
+        ):
+            client.create_issue("Test", "Body")
 
     def test_malformed_json_returns_false(self, client):
         mock_resp = MagicMock()
@@ -166,6 +199,16 @@ class TestCreateIssue:
 # ============================================================
 
 class TestPostPrComment:
+    @pytest.mark.parametrize(
+        "pr_number",
+        [0, -1, True, "42", 2_147_483_648],
+    )
+    def test_rejects_invalid_pr_number(self, client, pr_number):
+        with patch("httpx.post") as mock_post, pytest.raises(ValueError):
+            client.post_pr_comment(pr_number, "Test comment")
+
+        mock_post.assert_not_called()
+
     def test_success_returns_true(self, client):
         mock_resp = MagicMock()
         mock_resp.status_code = 201
@@ -191,7 +234,7 @@ class TestPostPrComment:
             assert "/issues/99/comments" in url
 
     def test_exception_returns_false(self, client):
-        with patch("httpx.post", side_effect=Exception("Timeout")):
+        with patch("httpx.post", side_effect=httpx.RequestError("Timeout")):
             result = client.post_pr_comment(1, "body")
         assert result is False
 
@@ -248,9 +291,21 @@ class TestGetOpenPrForBranch:
         assert result == 10
 
     def test_exception_returns_none(self, client):
-        with patch("httpx.get", side_effect=Exception("Network error")):
+        with patch("httpx.get", side_effect=httpx.RequestError("Network error")):
             result = client.get_open_pr_for_branch("feature/test")
         assert result is None
+
+    def test_rate_limit_failure_is_classified_in_log(self, client, caplog):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 403
+        mock_resp.headers = {"X-RateLimit-Remaining": "0"}
+
+        with caplog.at_level(logging.WARNING), patch("httpx.get", return_value=mock_resp):
+            assert client.get_open_pr_for_branch("feature/test") is None
+
+        record = next(record for record in caplog.records if record.name == "src.github.github_client")
+        assert record.github_error_category == "rate_limit"
+        assert record.status_code == 403
 
     def test_malformed_json_returns_none(self, client):
         mock_resp = MagicMock()

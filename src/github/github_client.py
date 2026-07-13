@@ -1,8 +1,13 @@
+import logging
 import os
 from typing import Any
 
 import httpx
 from src.github.repo_policy import is_repo_allowed, is_valid_repo_name
+
+
+MAX_GITHUB_PR_NUMBER = 2_147_483_647
+logger = logging.getLogger(__name__)
 
 
 class GitHubClient:
@@ -33,17 +38,46 @@ class GitHubClient:
         try:
             payload = response.json()
         except (ValueError, UnicodeError):
-            print(f"[GitHubClient] Invalid JSON response while {operation}")
+            logger.warning(
+                "GitHub API returned invalid JSON",
+                extra={"github_operation": operation},
+            )
             return None
 
         if not isinstance(payload, expected_type):
-            print(
-                f"[GitHubClient] Unexpected JSON response type while {operation}: "
-                f"expected {expected_type.__name__}"
+            logger.warning(
+                "GitHub API returned an unexpected JSON type",
+                extra={
+                    "github_operation": operation,
+                    "expected_type": expected_type.__name__,
+                },
             )
             return None
 
         return payload
+
+    @staticmethod
+    def _log_http_failure(response: httpx.Response, operation: str) -> None:
+        status_code = response.status_code
+        rate_limit_remaining = response.headers.get("X-RateLimit-Remaining")
+
+        if status_code == 429 or rate_limit_remaining == "0":
+            category = "rate_limit"
+        elif status_code in {401, 403}:
+            category = "authentication"
+        elif status_code >= 500:
+            category = "server_error"
+        else:
+            category = "api_error"
+
+        logger.warning(
+            "GitHub API request failed",
+            extra={
+                "github_operation": operation,
+                "status_code": status_code,
+                "github_error_category": category,
+            },
+        )
 
     def set_commit_status(
         self,
@@ -75,10 +109,13 @@ class GitHubClient:
                 print(f"[GitHubClient] Commit status set: {context}={state}")
                 return True
 
-            print(f"[GitHubClient] Failed to set commit status: HTTP {response.status_code}")
+            self._log_http_failure(response, "setting commit status")
             return False
-        except Exception as e:
-            print(f"[GitHubClient] Error setting commit status: {e}")
+        except httpx.HTTPError:
+            logger.exception(
+                "GitHub HTTP error while setting commit status",
+                extra={"github_operation": "setting commit status"},
+            )
             return False
 
     def get_default_branch(self) -> str:
@@ -101,9 +138,12 @@ class GitHubClient:
                     print(f"[GitHubClient] Default branch: {default_branch}")
                     return default_branch
 
-            print(f"[GitHubClient] Failed to get default branch: HTTP {response.status_code}")
-        except Exception as e:
-            print(f"[GitHubClient] Error getting default branch: {e}")
+            self._log_http_failure(response, "getting the default branch")
+        except httpx.HTTPError:
+            logger.exception(
+                "GitHub HTTP error while getting the default branch",
+                extra={"github_operation": "getting the default branch"},
+            )
 
         return os.getenv("CODEGUARD_DEFAULT_BRANCH", "main")
 
@@ -143,10 +183,13 @@ class GitHubClient:
                     print(f"[GitHubClient] No open PR for branch: {owner}:{branch}")
                     return None
             else:
-                print(f"[GitHubClient] Failed to get PRs: HTTP {response.status_code}")
+                self._log_http_failure(response, "getting open pull requests")
                 return None
-        except Exception as e:
-            print(f"[GitHubClient] Error: {e}")
+        except httpx.HTTPError:
+            logger.exception(
+                "GitHub HTTP error while getting open pull requests",
+                extra={"github_operation": "getting open pull requests"},
+            )
             return None
 
     def post_pr_comment(self, pr_number: int, body: str) -> bool:
@@ -154,6 +197,14 @@ class GitHubClient:
         Post comment ke PR.
         Return True kalau berhasil.
         """
+        if (
+            not isinstance(pr_number, int)
+            or isinstance(pr_number, bool)
+            or pr_number <= 0
+            or pr_number > MAX_GITHUB_PR_NUMBER
+        ):
+            raise ValueError("pr_number must be a positive integer within range")
+
         url = f"{self.base_url}/issues/{pr_number}/comments"
         payload = {"body": body}
         try:
@@ -162,11 +213,13 @@ class GitHubClient:
                 print(f"[GitHubClient] Comment posted to PR #{pr_number} ✅")
                 return True
             else:
-                print(f"[GitHubClient] Failed to post comment: HTTP {response.status_code}")
-                print(response.text[:200])
+                self._log_http_failure(response, "posting a pull request comment")
                 return False
-        except Exception as e:
-            print(f"[GitHubClient] Error: {e}")
+        except httpx.HTTPError:
+            logger.exception(
+                "GitHub HTTP error while posting a pull request comment",
+                extra={"github_operation": "posting a pull request comment"},
+            )
             return False
 
     def create_issue(self, title: str, body: str, labels: list[str] | None = None) -> bool:
@@ -199,8 +252,11 @@ class GitHubClient:
                 print(f"[GitHubClient] Issue created: {issue_url} ✅")
                 return True
             else:
-                print(f"[GitHubClient] Failed to create issue: HTTP {response.status_code}")
+                self._log_http_failure(response, "creating an issue")
                 return False
-        except Exception as e:
-            print(f"[GitHubClient] Error: {e}")
+        except httpx.HTTPError:
+            logger.exception(
+                "GitHub HTTP error while creating an issue",
+                extra={"github_operation": "creating an issue"},
+            )
             return False

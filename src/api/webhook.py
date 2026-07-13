@@ -13,13 +13,18 @@ from src.worker.worker import (
     process_sentry_job,
 )
 from src.agents.sentry_agent import SentryAgent
-from src.github.repo_policy import is_repo_allowed
+from src.github.repo_policy import (
+    RepositoryAllowlistNotConfiguredError,
+    is_repo_allowed,
+)
 
 load_dotenv()
 
 router = APIRouter()
 
 SENTRY_DEDUP_TTL_SECONDS = 86400
+GITHUB_PR_FILES_PER_PAGE = 100
+GITHUB_PR_FILES_MAX_PAGES = 10
 # Retry window if enqueue fails after the pending dedup key is acquired.
 SENTRY_DEDUP_PENDING_TTL_SECONDS = int(
     os.getenv("SENTRY_DEDUP_PENDING_TTL_SECONDS", "60")
@@ -53,7 +58,19 @@ async def github_webhook(request: Request):
         return JSONResponse(status_code=400, content={"status": "rejected"})
 
     owner, repo = repo_info
-    if not is_repo_allowed(owner, repo):
+    try:
+        repo_allowed = is_repo_allowed(owner, repo)
+    except RepositoryAllowlistNotConfiguredError:
+        print("[webhook] GitHub repository allowlist is not configured")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "error",
+                "reason": "repository policy not configured",
+            },
+        )
+
+    if not repo_allowed:
         print(f"[webhook] GitHub repo tidak diizinkan: {owner}/{repo}")
         return JSONResponse(
             status_code=403,
@@ -161,13 +178,12 @@ def extract_changed_files(event_type: str, payload: dict) -> list[str]:
             "Accept": "application/vnd.github+json",
         }
         url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}/files"
-        page = 1
 
-        while True:
+        for page in range(1, GITHUB_PR_FILES_MAX_PAGES + 1):
             response = httpx.get(
                 url,
                 headers=headers,
-                params={"per_page": 100, "page": page},
+                params={"per_page": GITHUB_PR_FILES_PER_PAGE, "page": page},
                 timeout=10,
             )
 
@@ -180,9 +196,13 @@ def extract_changed_files(event_type: str, payload: dict) -> list[str]:
                 if f.get("status") != "removed":
                     files.add(f["filename"])
 
-            if len(page_files) < 100:
+            if len(page_files) < GITHUB_PR_FILES_PER_PAGE:
                 break
-            page += 1
+        else:
+            print(
+                "[webhook] PR file pagination limit reached: "
+                f"{GITHUB_PR_FILES_MAX_PAGES} pages"
+            )
 
     return list(files)
 

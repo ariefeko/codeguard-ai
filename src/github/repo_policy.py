@@ -6,6 +6,10 @@ OWNER_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 REPO_NAME_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 
 
+class RepositoryAllowlistNotConfiguredError(RuntimeError):
+    """Raised when no repository authorization policy has been configured."""
+
+
 def is_valid_repo_name(owner: str, repo: str) -> bool:
     return bool(OWNER_NAME_RE.fullmatch(owner) and REPO_NAME_RE.fullmatch(repo))
 
@@ -50,6 +54,8 @@ def is_repo_allowed(owner: str, repo: str) -> bool:
 
     allowed_repos = get_allowed_repos()
     if not allowed_repos:
-        return False
+        raise RepositoryAllowlistNotConfiguredError(
+            "Repository allowlist is not configured"
+        )
 
     return normalize_repo(owner, repo) in allowed_repos
