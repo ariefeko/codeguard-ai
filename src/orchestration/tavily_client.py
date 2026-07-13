@@ -8,8 +8,8 @@ class CodeGuardSearch:
 
     def search_security_advisories(self, packages: list[str]) -> list[dict]:
         """
-        Cari security advisories untuk package yang ditemukan di code.
-        Contoh: ["laravel/framework 10.x", "symfony/http-foundation 6.4"]
+        Find security advisories for packages discovered in code.
+        Example: ["laravel/framework 10.x", "symfony/http-foundation 6.4"]
         """
         results = []
         for package in packages:
@@ -24,23 +24,23 @@ class CodeGuardSearch:
 
     def search_best_practices(self, language: str, context: str) -> str | None:
         """
-        Cari best practices terbaru untuk language/framework tertentu.
-        Contoh: language="PHP Laravel", context="authentication"
+        Find current best practices for a language or framework.
+        Example: language="PHP Laravel", context="authentication"
         """
         query = f"{language} {context} best practices 2025"
         return self._search(query)
 
     def search_owasp(self, issue_type: str) -> str | None:
         """
-        Cari OWASP recommendations untuk jenis issue tertentu.
-        Contoh: issue_type="SQL injection", "XSS", "CSRF"
+        Find OWASP recommendations for a specific issue type.
+        Example: issue_type="SQL injection", "XSS", "CSRF"
         """
         query = f"OWASP {issue_type} prevention best practice 2025"
         return self._search(query)
 
     def search_cve(self, package: str, version: str) -> str | None:
         """
-        Cari CVE spesifik untuk package + versi tertentu.
+        Find CVEs for a specific package and version.
         """
         query = f"CVE {package} {version} vulnerability security"
         return self._search(query)
@@ -48,7 +48,7 @@ class CodeGuardSearch:
     def _search(self, query: str) -> str | None:
         """
         Core search method.
-        Return summary string siap dimasukkan ke prompt.
+        Return a summary string ready to include in a prompt.
         """
         try:
             print(f"[Tavily] Searching: {query}")
@@ -59,12 +59,12 @@ class CodeGuardSearch:
                 include_answer=True,
             )
 
-            # Ambil answer summary kalau ada
+            # Prefer the answer summary when available.
             answer = response.get("answer")
             if answer:
                 return answer
 
-            # Fallback: ambil snippet dari results
+            # Fall back to snippets from search results.
             results = response.get("results", [])
             if results:
                 snippets = [r.get("content", "") for r in results[:2]]

@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+from unittest.mock import patch
 
 from src.agents.sentry_agent import SentryAgent
 
@@ -25,6 +26,23 @@ class TestVerifySignature:
         monkeypatch.setenv("SENTRY_CLIENT_SECRET", "test-secret")
 
         assert SentryAgent().verify_signature(b"payload", "not-a-hex-digest") is False
+
+    def test_malformed_signature_still_uses_constant_time_comparison(self, monkeypatch):
+        monkeypatch.setenv("SENTRY_CLIENT_SECRET", "test-secret")
+
+        with patch("src.agents.sentry_agent.hmac.compare_digest", return_value=False) as compare:
+            assert SentryAgent().verify_signature(b"payload", "short") is False
+
+        expected, provided = compare.call_args.args
+        assert len(expected) == 64
+        assert len(provided) == 64
+
+    def test_rejects_overlong_signature_even_if_valid_digest_is_its_prefix(self, monkeypatch):
+        monkeypatch.setenv("SENTRY_CLIENT_SECRET", "test-secret")
+        body = b"payload"
+        signature = hmac.new(b"test-secret", body, hashlib.sha256).hexdigest()
+
+        assert SentryAgent().verify_signature(body, signature + "extra") is False
 
     def test_rejects_missing_signature_header(self, monkeypatch):
         monkeypatch.setenv("SENTRY_CLIENT_SECRET", "test-secret")

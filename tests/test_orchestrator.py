@@ -1,7 +1,10 @@
 # pylint: disable=protected-access,redefined-outer-name
 import json
+from types import NoneType
+from typing import get_type_hints
 from unittest.mock import MagicMock, call, patch
 
+import httpx
 import pytest
 
 from src.orchestration.orchestrator import (
@@ -9,6 +12,14 @@ from src.orchestration.orchestrator import (
     PROVIDER_CHAIN,
     Orchestrator,
 )
+from src.github.repo_policy import get_allowed_repos, is_repo_allowed
+
+
+def test_public_policy_and_orchestrator_functions_have_return_type_hints():
+    assert get_type_hints(get_allowed_repos)["return"] == set[str]
+    assert get_type_hints(is_repo_allowed)["return"] is bool
+    assert get_type_hints(Orchestrator.__init__)["return"] is NoneType
+    assert get_type_hints(Orchestrator.review_code)["return"] == str | None
 
 
 @pytest.fixture
@@ -16,6 +27,10 @@ def orchestrator():
     """Hindari membuat Tavily client asli di unit test."""
     instance = Orchestrator.__new__(Orchestrator)
     instance.search = MagicMock()
+    instance.rag = MagicMock()
+    instance.rag.retrieve_for_context.return_value = []
+    instance.rag.retrieve_for_error.return_value = []
+    instance.rag.format_prompt_snippets.return_value = ""
     return instance
 
 
@@ -39,12 +54,12 @@ class TestReviewFallbackChain:
             call("prompt", PROVIDER_CHAIN[1]),
         ]
 
-    def test_returns_error_message_when_all_providers_fail(self, orchestrator):
+    def test_returns_none_when_all_providers_fail(self, orchestrator):
         orchestrator._request = MagicMock(return_value=None)
 
         result = orchestrator._call_llm("prompt")
 
-        assert result == "Error: all providers failed."
+        assert result is None
         assert orchestrator._request.call_count == len(PROVIDER_CHAIN)
 
 
@@ -109,7 +124,7 @@ class TestStructuredFallbackChain:
 class TestEntryPoints:
     def test_review_code_builds_prompt_with_search_results(self, orchestrator):
         context = {
-            "changed_files": {"src/app.py": "print('ok')"},
+            "changed_files": {"src/app.py": "changed content"},
             "related_files": {},
         }
         orchestrator._enrich_with_search = MagicMock(
@@ -136,7 +151,7 @@ class TestEntryPoints:
         bug_analysis_factory,
     ):
         context = {
-            "changed_files": {"src/app.py": "raise RuntimeError()"},
+            "changed_files": {"src/app.py": "changed content"},
             "related_files": {},
         }
         error = {
@@ -167,11 +182,65 @@ class TestEntryPoints:
 
 
 class TestSearchEnrichment:
+    def test_enriches_review_with_rag_and_skips_tavily(self, orchestrator):
+        snippets = [object()]
+        orchestrator.rag.retrieve_for_context.return_value = snippets
+        orchestrator.rag.format_prompt_snippets.return_value = "Relevant curated knowledge"
+        context = {
+            "changed_files": {"app/Service.php": "changed content"},
+            "related_files": {},
+        }
+
+        result = orchestrator._enrich_with_search(context)
+
+        assert result == {"rag": "Relevant curated knowledge"}
+        orchestrator.rag.retrieve_for_context.assert_called_once_with(context)
+        orchestrator.rag.format_prompt_snippets.assert_called_once_with(snippets)
+        orchestrator.search.search_best_practices.assert_not_called()
+        orchestrator.search.search_owasp.assert_not_called()
+
+    def test_falls_back_to_tavily_when_review_rag_fails(self, orchestrator):
+        orchestrator.rag.retrieve_for_context.side_effect = RuntimeError("qdrant down")
+        orchestrator.search.search_best_practices.return_value = "python ref"
+        orchestrator.search.search_owasp.return_value = "owasp ref"
+        context = {
+            "changed_files": {"src/app.py": "changed content"},
+            "related_files": {},
+        }
+
+        result = orchestrator._enrich_with_search(context)
+
+        assert result == {
+            "python_security": "python ref",
+            "owasp_top10": "owasp ref",
+        }
+
+    def test_falls_back_to_tavily_when_review_rag_returns_no_snippets(
+        self,
+        orchestrator,
+    ):
+        orchestrator.rag.retrieve_for_context.return_value = []
+        orchestrator.search.search_best_practices.return_value = "python ref"
+        orchestrator.search.search_owasp.return_value = "owasp ref"
+        context = {
+            "changed_files": {"src/app.py": "changed content"},
+            "related_files": {},
+        }
+
+        result = orchestrator._enrich_with_search(context)
+
+        assert result == {
+            "python_security": "python ref",
+            "owasp_top10": "owasp ref",
+        }
+        orchestrator.rag.retrieve_for_context.assert_called_once_with(context)
+        orchestrator.rag.format_prompt_snippets.assert_not_called()
+
     def test_enriches_python_review_and_owasp_reference(self, orchestrator):
         orchestrator.search.search_best_practices.return_value = "python ref"
         orchestrator.search.search_owasp.return_value = "owasp ref"
         context = {
-            "changed_files": {"src/app.py": "print('ok')"},
+            "changed_files": {"src/app.py": "changed content"},
             "related_files": {},
         }
 
@@ -193,7 +262,7 @@ class TestSearchEnrichment:
             "top ten ref",
         ]
         context = {
-            "changed_files": {"app/Service.php": "<?php"},
+            "changed_files": {"app/Service.php": "changed content"},
             "related_files": {},
         }
 
@@ -209,7 +278,7 @@ class TestSearchEnrichment:
         orchestrator.search.search_best_practices.return_value = "js ref"
         orchestrator.search.search_owasp.return_value = None
         context = {
-            "changed_files": {"src/app.ts": "export {}"},
+            "changed_files": {"src/app.ts": "changed content"},
             "related_files": {},
         }
 
@@ -227,6 +296,44 @@ class TestSearchEnrichment:
         result = orchestrator._search_for_error({"type": "RuntimeError"})
 
         assert result == {"error_info": "runtime reference"}
+        orchestrator.search._search.assert_called_once_with(
+            "RuntimeError fix solution best practice"
+        )
+
+    def test_enriches_error_with_rag_and_skips_tavily(self, orchestrator):
+        snippets = [object()]
+        orchestrator.rag.retrieve_for_error.return_value = snippets
+        orchestrator.rag.format_prompt_snippets.return_value = "Relevant bug knowledge"
+        context = {
+            "changed_files": {"src/app.py": "changed content"},
+            "related_files": {},
+        }
+        error = {"type": "RuntimeError", "file": "src/app.py"}
+
+        result = orchestrator._search_for_error(error, context)
+
+        assert result == {"rag": "Relevant bug knowledge"}
+        orchestrator.rag.retrieve_for_error.assert_called_once_with(error, context)
+        orchestrator.rag.format_prompt_snippets.assert_called_once_with(snippets)
+        orchestrator.search._search.assert_not_called()
+
+    def test_falls_back_to_tavily_when_error_rag_returns_no_snippets(
+        self,
+        orchestrator,
+    ):
+        orchestrator.rag.retrieve_for_error.return_value = []
+        orchestrator.search._search.return_value = "runtime reference"
+        context = {
+            "changed_files": {"src/app.py": "changed content"},
+            "related_files": {},
+        }
+        error = {"type": "RuntimeError", "file": "src/app.py"}
+
+        result = orchestrator._search_for_error(error, context)
+
+        assert result == {"error_info": "runtime reference"}
+        orchestrator.rag.retrieve_for_error.assert_called_once_with(error, context)
+        orchestrator.rag.format_prompt_snippets.assert_not_called()
         orchestrator.search._search.assert_called_once_with(
             "RuntimeError fix solution best practice"
         )
@@ -273,6 +380,7 @@ class TestRequest:
         assert payload["response_format"] == {"type": "json_object"}
         assert payload["max_tokens"] == 4096
         assert payload["messages"] == [{"role": "user", "content": "prompt"}]
+        assert post.call_args.kwargs["verify"] is True
 
     def test_handles_openagentic_done_suffix(
         self,
@@ -334,3 +442,22 @@ class TestRequest:
             side_effect=RuntimeError("network down"),
         ):
             assert orchestrator._request("prompt", provider) is None
+
+    def test_returns_none_for_tls_certificate_failure(
+        self,
+        orchestrator,
+        monkeypatch,
+        capsys,
+    ):
+        provider = PROVIDER_CHAIN[0]
+        monkeypatch.setenv(provider["api_key"], "secret")
+
+        with patch(
+            "src.orchestration.orchestrator.httpx.post",
+            side_effect=httpx.ConnectError("certificate verify failed"),
+        ):
+            assert orchestrator._request("prompt", provider) is None
+
+        output = capsys.readouterr().out
+        assert "ConnectError" in output
+        assert "certificate verify failed" not in output

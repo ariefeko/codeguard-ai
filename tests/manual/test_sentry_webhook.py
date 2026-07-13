@@ -1,23 +1,22 @@
 """
-Test lokal untuk endpoint /webhook/sentry -- kirim payload Sentry palsu
-(struktur Issue Alert webhook, data.event) dengan signature HMAC yang
-benar, supaya bisa verifikasi seluruh flow tanpa perlu trigger error
-production sungguhan di Tagihin.
+Local test for /webhook/sentry. It sends a synthetic Sentry Issue Alert
+payload (data.event) with a valid HMAC signature to verify the complete flow
+without triggering a real production error in Tagihin.
 
-CARA PAKAI:
-1. Jalankan server lokal dulu di terminal lain:
+USAGE:
+1. Start the local server in another terminal:
    uvicorn src.api.main:app --reload
 
-2. Pastikan .env sudah ada SENTRY_CLIENT_SECRET (yang sama dengan yang
-   di-set di Internal Integration Sentry).
+2. Ensure .env contains the SENTRY_CLIENT_SECRET configured in the Sentry
+   Internal Integration.
 
-3. Jalankan script ini:
+3. Run this script:
    export $(cat .env | grep -v '^#' | xargs)
    python test_sentry_webhook.py
 
-4. Perhatikan output webhook.py di terminal uvicorn -- harus muncul
-   log "SENTRY WEBHOOK", lalu job enqueued. Cek juga worker.py log
-   (jalankan rq worker di terminal ketiga) untuk lihat hasil akhir.
+4. Inspect webhook.py output in the uvicorn terminal for the "SENTRY WEBHOOK"
+   and enqueue logs. Run an RQ worker in a third terminal and inspect worker.py
+   output for the final result.
 """
 import os
 import json
@@ -27,9 +26,9 @@ import requests
 
 WEBHOOK_URL = "http://localhost:8000/webhook/sentry"
 
-# Payload dummy -- struktur Issue Alert webhook (data.event), sesuai
-# yang dipakai akun Developer plan (gratis). Stack trace contoh kasus
-# Laravel: null pointer karena relasi Eloquent tidak di-load.
+# Synthetic Issue Alert webhook payload (data.event) matching the Developer
+# plan. The stack trace models a Laravel null pointer caused by an unloaded
+# Eloquent relationship.
 FAKE_PAYLOAD = {
     "action": "triggered",
     "installation": {
@@ -73,21 +72,20 @@ FAKE_PAYLOAD = {
 
 
 def compute_signature(body_bytes: bytes, secret: str) -> str:
-    """Sama persis dengan logic verify_signature() di sentry_agent.py."""
+    """Match the verify_signature() logic in sentry_agent.py exactly."""
     return hmac.new(secret.encode("utf-8"), body_bytes, hashlib.sha256).hexdigest()
 
 
 def main():
     secret = os.getenv("SENTRY_CLIENT_SECRET")
     if not secret:
-        print("❌ SENTRY_CLIENT_SECRET tidak ditemukan di environment.")
-        print("   Jalankan: export $(cat .env | grep -v '^#' | xargs)")
+        print("❌ SENTRY_CLIENT_SECRET was not found in the environment.")
+        print("   Run: export $(cat .env | grep -v '^#' | xargs)")
         return
 
-    # PENTING: body harus di-serialize SEKALI, dipakai utuh untuk
-    # signature DAN untuk request -- kalau beda serialisasi, signature
-    # tidak akan cocok (sama seperti alasan kita ambil raw_body di
-    # webhook.py sebelum parsing).
+    # IMPORTANT: serialize the body once and use the exact bytes for both the
+    # signature and request. Different serialization would invalidate the
+    # signature, which is why webhook.py reads raw_body before parsing.
     body_bytes = json.dumps(FAKE_PAYLOAD).encode("utf-8")
     signature = compute_signature(body_bytes, secret)
 
@@ -97,7 +95,7 @@ def main():
         "Sentry-Hook-Resource": "issue",
     }
 
-    print("=== Mengirim payload Sentry palsu ===")
+    print("=== Sending synthetic Sentry payload ===")
     print(f"URL: {WEBHOOK_URL}")
     print(f"Signature: {signature[:16]}...")
     print()
@@ -105,8 +103,8 @@ def main():
     try:
         response = requests.post(WEBHOOK_URL, data=body_bytes, headers=headers, timeout=10)
     except requests.exceptions.ConnectionError:
-        print("❌ Tidak bisa connect ke localhost:8000")
-        print("   Pastikan uvicorn sudah jalan: uvicorn src.api.main:app --reload")
+        print("❌ Could not connect to localhost:8000")
+        print("   Ensure uvicorn is running: uvicorn src.api.main:app --reload")
         return
 
     print(f"Status code: {response.status_code}")
@@ -116,34 +114,34 @@ def main():
         print(f"Response (raw): {response.text}")
 
     if response.status_code == 202:
-        print("\n✅ Job berhasil di-enqueue. Cek terminal worker untuk hasil akhir.")
+        print("\n✅ Job enqueued successfully. Check the worker terminal for the result.")
     elif response.status_code == 401:
-        print("\n❌ Signature ditolak. Cek apakah SENTRY_CLIENT_SECRET di .env")
-        print("   sama persis dengan Client Secret di dashboard Sentry.")
+        print("\n❌ Signature rejected. Confirm that SENTRY_CLIENT_SECRET in .env")
+        print("   exactly matches the client secret in the Sentry dashboard.")
     else:
-        print(f"\n⚠️  Status tidak sesuai ekspektasi (harusnya 202).")
+        print("\n⚠️  Unexpected status; expected 202.")
 
 
 def test_invalid_signature():
-    """Test tambahan: pastikan request dengan signature SALAH benar-benar ditolak."""
+    """Verify that a request with an invalid signature is rejected."""
     body_bytes = json.dumps(FAKE_PAYLOAD).encode("utf-8")
     headers = {
         "Content-Type": "application/json",
-        "Sentry-Hook-Signature": "signature-yang-sengaja-salah",
+        "Sentry-Hook-Signature": "intentionally-invalid-signature",
         "Sentry-Hook-Resource": "issue",
     }
 
-    print("\n=== Test signature SALAH (harus ditolak 401) ===")
+    print("\n=== Testing invalid signature (expecting 401) ===")
     try:
         response = requests.post(WEBHOOK_URL, data=body_bytes, headers=headers, timeout=10)
         print(f"Status code: {response.status_code}")
         if response.status_code == 401:
-            print("✅ Benar -- signature salah ditolak dengan 401")
+            print("✅ Invalid signature correctly rejected with 401")
         else:
-            print(f"❌ SALAH -- harusnya 401, tapi dapat {response.status_code}")
-            print("   Ini berarti verify_signature() TIDAK bekerja dengan benar!")
+            print(f"❌ Expected 401 but received {response.status_code}")
+            print("   verify_signature() is not working correctly.")
     except requests.exceptions.ConnectionError:
-        print("❌ Tidak bisa connect ke localhost:8000")
+        print("❌ Could not connect to localhost:8000")
 
 
 if __name__ == "__main__":

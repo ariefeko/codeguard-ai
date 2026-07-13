@@ -19,6 +19,8 @@ EXTENSION_LANGUAGE = {
     ".py": "python",
     ".js": "js",
     ".ts": "js",
+    ".jsx": "js",
+    ".tsx": "js",
     ".java": "java",
     ".go": "go",
     ".cs": "csharp",
@@ -51,12 +53,21 @@ TOPIC_PARENT_CATEGORY = {
     "express_security_basics": CATEGORY_SECURITY,
     "spring_security_basics": CATEGORY_SECURITY,
     "secure_coding_basics": CATEGORY_SECURITY,
+    "react_security_basics": CATEGORY_SECURITY,
+    "react_xss_dangerously_set_innerhtml": CATEGORY_SECURITY,
+    "react_unsafe_url_injection": CATEGORY_SECURITY,
+    "react_eval_injection": CATEGORY_SECURITY,
+    "react_client_secret_exposure": CATEGORY_SECURITY,
+    "tanstack_query_cache_poisoning": CATEGORY_SECURITY,
+    "tanstack_query_unvalidated_params": CATEGORY_SECURITY,
     "laravel_validation": CATEGORY_BEST_PRACTICE,
     "eloquent_best_practices": CATEGORY_BEST_PRACTICE,
     "fastapi_dependency_injection": CATEGORY_BEST_PRACTICE,
     "express_middleware_patterns": CATEGORY_BEST_PRACTICE,
     "spring_boot_configuration": CATEGORY_BEST_PRACTICE,
     "go_error_handling": CATEGORY_BEST_PRACTICE,
+    "react_best_practices": CATEGORY_BEST_PRACTICE,
+    "tanstack_query_best_practices": CATEGORY_BEST_PRACTICE,
     "missing_null_handling": CATEGORY_CODE_QUALITY,
     "laravel_exception_handling": CATEGORY_FRAMEWORK,
     "code_review_best_practices": CATEGORY_CODE_QUALITY,
@@ -105,6 +116,9 @@ class TopicMapper:
             topics=topics,
             source="sentry",
         )
+
+    def collections_for(self, category: str, language: str) -> tuple[str, ...]:
+        return self._collections_for(category, language)
 
     def _collect_documents(self, context: dict) -> dict[str, str]:
         documents = {}
@@ -157,6 +171,24 @@ class TopicMapper:
             ),
         ):
             return "fastapi"
+
+        if language == "js" and self._has_any(searchable, (".jsx", ".tsx")):
+            return "react"
+
+        if language == "js" and self._has_any(
+            searchable,
+            (
+                "from \"react\"",
+                "from 'react'",
+                "react-dom",
+                "usestate(",
+                "useeffect(",
+                "usecontext(",
+                "usememo(",
+                "usecallback(",
+            ),
+        ):
+            return "react"
 
         if language == "js" and self._has_any(
             searchable,
@@ -222,10 +254,73 @@ class TopicMapper:
             category = CATEGORY_SECURITY
             topics.append("xss_output_escaping")
 
+        if language == "js" and framework == "react":
+            if self._has_any(searchable, ("dangerouslysetinnerhtml",)):
+                category = CATEGORY_SECURITY
+                topics.append("react_xss_dangerously_set_innerhtml")
+
+            if self._has_any(
+                searchable,
+                (
+                    "eval(",
+                    "new function(",
+                    "settimeout(\"",
+                    "settimeout('",
+                    "setinterval(\"",
+                    "setinterval('",
+                ),
+            ):
+                category = CATEGORY_SECURITY
+                topics.append("react_eval_injection")
+
+            if self._has_any(
+                searchable,
+                (
+                    "javascript:",
+                    "document.write(",
+                    "window.location = ",
+                    "window.location.href = ",
+                ),
+            ):
+                category = CATEGORY_SECURITY
+                topics.append("react_unsafe_url_injection")
+
+            if self._has_any(
+                searchable,
+                ("next_public_", "vite_"),
+            ) and self._has_any(
+                searchable,
+                ("secret", "api_key", "private_key", "password", "token"),
+            ):
+                category = CATEGORY_SECURITY
+                topics.append("react_client_secret_exposure")
+
+            if self._has_any(
+                searchable,
+                ("usequery(", "usemutation(", "@tanstack/react-query", "queryclient"),
+            ):
+                if self._has_any(
+                    searchable,
+                    ("token", "session", "auth", "user_id", "userid"),
+                ):
+                    category = CATEGORY_SECURITY
+                    topics.append("tanstack_query_cache_poisoning")
+
+                # Interpolating raw request/user input directly into a fetch URL or
+                # query key (instead of passing it as a controlled argument) risks
+                # SSRF/path traversal and cache-key collisions across users.
+                if self._has_any(searchable, ("usequery(`", "fetch(`", "axios.get(`")):
+                    category = CATEGORY_SECURITY
+                    topics.append("tanstack_query_unvalidated_params")
+
         if language == "php" and framework == "laravel":
             topics.extend(("laravel_validation", "eloquent_best_practices"))
         elif language == "python" and framework == "fastapi":
             topics.extend(("fastapi_security_basics", "fastapi_dependency_injection"))
+        elif language == "js" and framework == "react":
+            topics.extend(("react_security_basics", "react_best_practices"))
+            if self._has_any(searchable, ("usequery(", "usemutation(", "@tanstack/react-query")):
+                topics.append("tanstack_query_best_practices")
         elif language == "js" and framework == "express":
             topics.extend(("express_security_basics", "express_middleware_patterns"))
         elif language == "java" and framework == "spring":

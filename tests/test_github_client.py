@@ -1,27 +1,49 @@
 # tests/test_github_client.py
 """
-Unit tests untuk src/github/github_client.py
+Unit tests for src/github/github_client.py
 
 Coverage:
 - create_issue() -- success, HTTP error, labels default vs custom
 - post_pr_comment() -- success, HTTP error
-- get_open_pr_for_branch() -- ada PR, tidak ada PR, HTTP error
+- get_open_pr_for_branch() -- pull request found, none found, HTTP error
 """
+import os
+from typing import Any, get_type_hints
 from unittest.mock import patch, MagicMock
+import logging
+
+import httpx
 import pytest
 from src.github.github_client import GitHubClient
+from src.github.repo_policy import RepositoryAllowlistNotConfiguredError
+from src.config import DEFAULT_REPOSITORY_BRANCH, GITHUB_STATUS_DESCRIPTION_MAX_LENGTH
 
 
 @pytest.fixture
-def client():
-    with patch.dict(
-        "os.environ",
-        {
-            "GITHUB_PAT_TOKEN": "fake_token",
-            "CODEGUARD_ALLOWED_REPOS": "ariefeko/tagihin",
-        },
-    ):
-        return GitHubClient("ariefeko", "tagihin")
+def client(monkeypatch):
+    monkeypatch.setenv("GITHUB_PAT_TOKEN", "fake_token")
+    monkeypatch.setenv("CODEGUARD_ALLOWED_REPOS", "ariefeko/tagihin")
+    http_client = MagicMock()
+    http_client.post.side_effect = lambda *args, **kwargs: httpx.post(*args, **kwargs)
+    http_client.get.side_effect = lambda *args, **kwargs: httpx.get(*args, **kwargs)
+    return GitHubClient(
+        "ariefeko",
+        "tagihin",
+        http_client=http_client,
+        sleep=MagicMock(),
+    )
+
+
+def test_client_fixture_keeps_environment_active(client):
+    assert client.token == "fake_token"
+    assert os.getenv("GITHUB_PAT_TOKEN") == "fake_token"
+    assert os.getenv("CODEGUARD_ALLOWED_REPOS") == "ariefeko/tagihin"
+
+
+def test_parse_json_response_expected_type_annotation_is_explicit():
+    hints = get_type_hints(GitHubClient._parse_json_response)
+
+    assert hints["expected_type"] == type[Any]
 
 
 def test_rejects_unallowed_repository(monkeypatch):
@@ -38,6 +60,16 @@ def test_rejects_invalid_repository_name_format(monkeypatch):
 
     with pytest.raises(ValueError):
         GitHubClient("ariefeko", "bad repo")
+
+
+def test_reports_missing_repository_allowlist(monkeypatch):
+    monkeypatch.setenv("GITHUB_PAT_TOKEN", "fake_token")
+    monkeypatch.delenv("CODEGUARD_ALLOWED_REPOS", raising=False)
+    monkeypatch.delenv("CODEGUARD_DEFAULT_OWNER", raising=False)
+    monkeypatch.delenv("CODEGUARD_DEFAULT_REPO", raising=False)
+
+    with pytest.raises(RepositoryAllowlistNotConfiguredError):
+        GitHubClient("ariefeko", "tagihin")
 
 
 class TestSetCommitStatus:
@@ -71,7 +103,7 @@ class TestSetCommitStatus:
             client.set_commit_status("abc123", "success", "x" * 200)
 
         payload = mock_post.call_args.kwargs["json"]
-        assert len(payload["description"]) == 140
+        assert len(payload["description"]) == GITHUB_STATUS_DESCRIPTION_MAX_LENGTH
 
     def test_rejects_invalid_state(self, client):
         with pytest.raises(ValueError):
@@ -83,6 +115,69 @@ class TestSetCommitStatus:
 
         with patch("httpx.post", return_value=mock_resp):
             assert client.set_commit_status("abc123", "success", "ok") is False
+
+    def test_timeout_is_classified_in_log(self, client, caplog):
+        with caplog.at_level(logging.WARNING), patch(
+            "httpx.post",
+            side_effect=httpx.ReadTimeout("request timed out"),
+        ):
+            assert client.set_commit_status("abc123", "success", "ok") is False
+
+        record = next(
+            record
+            for record in caplog.records
+            if record.name == "src.github.github_client"
+            and hasattr(record, "github_error_category")
+        )
+        assert record.github_error_category == "timeout"
+        assert record.exception_class == "ReadTimeout"
+        assert record.github_operation == "setting commit status"
+
+    def test_authentication_failure_is_classified_in_log(self, client, caplog):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 401
+        mock_resp.headers = {}
+
+        with caplog.at_level(logging.WARNING), patch("httpx.post", return_value=mock_resp):
+            assert client.set_commit_status("abc123", "success", "ok") is False
+
+        record = next(
+            record
+            for record in caplog.records
+            if record.name == "src.github.github_client"
+            and hasattr(record, "github_error_category")
+        )
+        assert record.github_error_category == "authentication"
+        assert record.status_code == 401
+
+    def test_retries_transient_server_error_then_succeeds(self, client):
+        server_error = MagicMock(status_code=503, headers={})
+        success = MagicMock(status_code=201, headers={})
+        client.http_client.post.side_effect = [server_error, success]
+
+        assert client.set_commit_status("abc123", "success", "ok") is True
+        assert client.http_client.post.call_count == 2
+        client._sleep.assert_called_once_with(0.5)
+
+    def test_retries_network_error_then_succeeds(self, client):
+        success = MagicMock(status_code=201, headers={})
+        client.http_client.post.side_effect = [
+            httpx.ConnectError("connection reset"),
+            success,
+        ]
+
+        assert client.set_commit_status("abc123", "success", "ok") is True
+        assert client.http_client.post.call_count == 2
+        client._sleep.assert_called_once_with(0.5)
+
+    def test_does_not_retry_permanent_client_error(self, client):
+        response = MagicMock(status_code=422, headers={})
+        client.http_client.post.side_effect = None
+        client.http_client.post.return_value = response
+
+        assert client.set_commit_status("abc123", "success", "ok") is False
+        client.http_client.post.assert_called_once()
+        client._sleep.assert_not_called()
 
 
 # ============================================================
@@ -109,7 +204,7 @@ class TestCreateIssue:
         assert result is False
 
     def test_default_labels(self, client):
-        """Tanpa parameter labels, default harus ['codeguard-ai']."""
+        """Labels default to ['codeguard-ai'] when omitted."""
         mock_resp = MagicMock()
         mock_resp.status_code = 201
         mock_resp.json.return_value = {"html_url": "https://github.com/test"}
@@ -119,7 +214,7 @@ class TestCreateIssue:
             assert payload["labels"] == ["codeguard-ai"]
 
     def test_custom_labels(self, client):
-        """Labels custom harus ter-pass dengan benar, bukan override ke default."""
+        """Custom labels are passed through instead of being replaced by defaults."""
         mock_resp = MagicMock()
         mock_resp.status_code = 201
         mock_resp.json.return_value = {"html_url": "https://github.com/test"}
@@ -129,7 +224,7 @@ class TestCreateIssue:
             assert payload["labels"] == ["bug", "ai-analyzed"]
 
     def test_fallback_labels_custom(self, client):
-        """Label 'needs-manual-review' dipakai saat LLM gagal semua."""
+        """The fallback uses 'needs-manual-review' after all LLMs fail."""
         mock_resp = MagicMock()
         mock_resp.status_code = 201
         mock_resp.json.return_value = {"html_url": "https://github.com/test"}
@@ -139,10 +234,33 @@ class TestCreateIssue:
             assert "needs-manual-review" in payload["labels"]
 
     def test_exception_returns_false(self, client):
-        """Network error atau exception lain harus return False, bukan crash."""
-        with patch("httpx.post", side_effect=Exception("Connection error")):
+        """A network error returns False instead of crashing."""
+        with patch("httpx.post", side_effect=httpx.RequestError("Connection error")):
             result = client.create_issue("Test", "Body")
         assert result is False
+
+    def test_unexpected_exception_is_not_swallowed(self, client):
+        with patch("httpx.post", side_effect=RuntimeError("programming error")), pytest.raises(
+            RuntimeError,
+            match="programming error",
+        ):
+            client.create_issue("Test", "Body")
+
+    def test_malformed_json_returns_false(self, client):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 201
+        mock_resp.json.side_effect = ValueError("invalid JSON")
+
+        with patch("httpx.post", return_value=mock_resp):
+            assert client.create_issue("Test", "Body") is False
+
+    def test_unexpected_json_shape_returns_false(self, client):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 201
+        mock_resp.json.return_value = ["not", "an", "object"]
+
+        with patch("httpx.post", return_value=mock_resp):
+            assert client.create_issue("Test", "Body") is False
 
 
 # ============================================================
@@ -150,6 +268,16 @@ class TestCreateIssue:
 # ============================================================
 
 class TestPostPrComment:
+    @pytest.mark.parametrize(
+        "pr_number",
+        [0, -1, True, "42", 2_147_483_648],
+    )
+    def test_rejects_invalid_pr_number(self, client, pr_number):
+        with patch("httpx.post") as mock_post, pytest.raises(ValueError):
+            client.post_pr_comment(pr_number, "Test comment")
+
+        mock_post.assert_not_called()
+
     def test_success_returns_true(self, client):
         mock_resp = MagicMock()
         mock_resp.status_code = 201
@@ -166,7 +294,7 @@ class TestPostPrComment:
         assert result is False
 
     def test_posts_to_correct_pr_number(self, client):
-        """URL harus include PR number yang benar."""
+        """The URL includes the correct pull request number."""
         mock_resp = MagicMock()
         mock_resp.status_code = 201
         with patch("httpx.post", return_value=mock_resp) as mock_post:
@@ -175,7 +303,7 @@ class TestPostPrComment:
             assert "/issues/99/comments" in url
 
     def test_exception_returns_false(self, client):
-        with patch("httpx.post", side_effect=Exception("Timeout")):
+        with patch("httpx.post", side_effect=httpx.RequestError("Timeout")):
             result = client.post_pr_comment(1, "body")
         assert result is False
 
@@ -210,7 +338,7 @@ class TestGetOpenPrForBranch:
     def test_returns_none_when_no_pr(self, client):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        mock_resp.json.return_value = []  # list kosong = tidak ada PR open
+        mock_resp.json.return_value = []  # An empty list means no open pull request.
         with patch("httpx.get", return_value=mock_resp):
             result = client.get_open_pr_for_branch("feature/test")
         assert result is None
@@ -223,7 +351,7 @@ class TestGetOpenPrForBranch:
         assert result is None
 
     def test_returns_first_pr_when_multiple(self, client):
-        """Kalau ada beberapa PR open untuk branch yang sama, ambil yang pertama."""
+        """Return the first of multiple open pull requests for the same branch."""
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = [{"number": 10}, {"number": 11}]
@@ -232,9 +360,42 @@ class TestGetOpenPrForBranch:
         assert result == 10
 
     def test_exception_returns_none(self, client):
-        with patch("httpx.get", side_effect=Exception("Network error")):
+        with patch("httpx.get", side_effect=httpx.RequestError("Network error")):
             result = client.get_open_pr_for_branch("feature/test")
         assert result is None
+
+    def test_rate_limit_failure_is_classified_in_log(self, client, caplog):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 403
+        mock_resp.headers = {"X-RateLimit-Remaining": "0"}
+
+        with caplog.at_level(logging.WARNING), patch("httpx.get", return_value=mock_resp):
+            assert client.get_open_pr_for_branch("feature/test") is None
+
+        record = next(
+            record
+            for record in caplog.records
+            if record.name == "src.github.github_client"
+            and hasattr(record, "github_error_category")
+        )
+        assert record.github_error_category == "rate_limit"
+        assert record.status_code == 403
+
+    def test_malformed_json_returns_none(self, client):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.side_effect = ValueError("invalid JSON")
+
+        with patch("httpx.get", return_value=mock_resp):
+            assert client.get_open_pr_for_branch("feature/test") is None
+
+    def test_malformed_pr_shape_returns_none(self, client):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = [{"title": "missing number"}]
+
+        with patch("httpx.get", return_value=mock_resp):
+            assert client.get_open_pr_for_branch("feature/test") is None
 
 
 class TestGetDefaultBranch:
@@ -242,7 +403,7 @@ class TestGetDefaultBranch:
         monkeypatch.setenv("CODEGUARD_DEFAULT_BRANCH", "develop")
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        mock_resp.json.return_value = {"default_branch": "main"}
+        mock_resp.json.return_value = {"default_branch": DEFAULT_REPOSITORY_BRANCH}
 
         with patch("httpx.get") as mock_get:
             assert client.get_default_branch() == "develop"
@@ -252,10 +413,10 @@ class TestGetDefaultBranch:
         monkeypatch.delenv("CODEGUARD_DEFAULT_BRANCH", raising=False)
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        mock_resp.json.return_value = {"default_branch": "main"}
+        mock_resp.json.return_value = {"default_branch": DEFAULT_REPOSITORY_BRANCH}
 
         with patch("httpx.get", return_value=mock_resp):
-            assert client.get_default_branch() == "main"
+            assert client.get_default_branch() == DEFAULT_REPOSITORY_BRANCH
 
     def test_falls_back_to_env_default_branch(self, client, monkeypatch):
         monkeypatch.delenv("CODEGUARD_DEFAULT_BRANCH", raising=False)
@@ -263,4 +424,22 @@ class TestGetDefaultBranch:
         mock_resp.status_code = 500
 
         with patch("httpx.get", return_value=mock_resp):
-            assert client.get_default_branch() == "main"
+            assert client.get_default_branch() == DEFAULT_REPOSITORY_BRANCH
+
+    def test_malformed_json_falls_back_to_main(self, client, monkeypatch):
+        monkeypatch.delenv("CODEGUARD_DEFAULT_BRANCH", raising=False)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.side_effect = ValueError("invalid JSON")
+
+        with patch("httpx.get", return_value=mock_resp):
+            assert client.get_default_branch() == DEFAULT_REPOSITORY_BRANCH
+
+    def test_unexpected_json_shape_falls_back_to_main(self, client, monkeypatch):
+        monkeypatch.delenv("CODEGUARD_DEFAULT_BRANCH", raising=False)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = ["not", "an", "object"]
+
+        with patch("httpx.get", return_value=mock_resp):
+            assert client.get_default_branch() == DEFAULT_REPOSITORY_BRANCH

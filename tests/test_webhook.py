@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.api import webhook
+from src.github.repo_policy import RepositoryAllowlistNotConfiguredError
 
 
 class TestGithubSignature:
@@ -104,6 +105,46 @@ class TestRepoPolicy:
 
         assert webhook.is_repo_allowed("attacker", "repo") is False
 
+    def test_raises_distinct_error_when_allowlist_is_missing(self, monkeypatch):
+        monkeypatch.delenv("CODEGUARD_ALLOWED_REPOS", raising=False)
+        monkeypatch.delenv("CODEGUARD_DEFAULT_OWNER", raising=False)
+        monkeypatch.delenv("CODEGUARD_DEFAULT_REPO", raising=False)
+
+        with pytest.raises(RepositoryAllowlistNotConfiguredError):
+            webhook.is_repo_allowed("ariefeko", "tagihin")
+
+    @pytest.mark.asyncio
+    async def test_webhook_reports_missing_allowlist_as_configuration_error(
+        self,
+        monkeypatch,
+    ):
+        monkeypatch.setenv("GITHUB_WEBHOOK_SECRET", "github-secret")
+        monkeypatch.delenv("CODEGUARD_ALLOWED_REPOS", raising=False)
+        monkeypatch.delenv("CODEGUARD_DEFAULT_OWNER", raising=False)
+        monkeypatch.delenv("CODEGUARD_DEFAULT_REPO", raising=False)
+        body = (
+            b'{"repository":{"owner":{"login":"ariefeko"},'
+            b'"name":"tagihin"},"commits":[]}'
+        )
+        signature = "sha256=" + hmac.new(
+            b"github-secret",
+            body,
+            hashlib.sha256,
+        ).hexdigest()
+        request = MagicMock()
+        request.body = AsyncMock(return_value=body)
+        request.headers.get.side_effect = lambda key, default=None: {
+            "X-Hub-Signature-256": signature,
+            "X-GitHub-Event": "push",
+        }.get(key, default)
+
+        response = await webhook.github_webhook(request)
+
+        assert response.status_code == 503
+        assert response.body == (
+            b'{"status":"error","reason":"repository policy not configured"}'
+        )
+
 
 class TestExtractChangedFiles:
     def test_fetches_all_pr_file_pages(self, monkeypatch):
@@ -129,15 +170,60 @@ class TestExtractChangedFiles:
             MagicMock(status_code=200, json=MagicMock(return_value=second_page)),
         ]
 
-        with patch("src.api.webhook.httpx.get", side_effect=responses) as mock_get:
+        http_client = MagicMock()
+        http_client.get.side_effect = responses
+        with patch(
+            "src.api.webhook.get_github_http_client",
+            return_value=http_client,
+        ):
             result = webhook.extract_changed_files("pull_request", payload)
 
         assert "src/file_0.py" in result
         assert "src/final.py" in result
         assert "src/deleted.py" not in result
-        assert mock_get.call_count == 2
-        assert mock_get.call_args_list[0].kwargs["params"] == {"per_page": 100, "page": 1}
-        assert mock_get.call_args_list[1].kwargs["params"] == {"per_page": 100, "page": 2}
+        assert http_client.get.call_count == 2
+        assert http_client.get.call_args_list[0].kwargs["params"] == {
+            "per_page": 100,
+            "page": 1,
+        }
+        assert http_client.get.call_args_list[1].kwargs["params"] == {
+            "per_page": 100,
+            "page": 2,
+        }
+
+    def test_stops_pr_file_pagination_at_configured_limit(self, monkeypatch):
+        monkeypatch.setenv("GITHUB_PAT_TOKEN", "token")
+        payload = {
+            "action": "opened",
+            "number": 12,
+            "repository": {
+                "owner": {"login": "ariefeko"},
+                "name": "tagihin",
+            },
+        }
+
+        def full_page(*_args, **kwargs):
+            page = kwargs["params"]["page"]
+            files = [
+                {
+                    "filename": f"src/page_{page}_file_{index}.py",
+                    "status": "modified",
+                }
+                for index in range(100)
+            ]
+            return MagicMock(status_code=200, json=MagicMock(return_value=files))
+
+        http_client = MagicMock()
+        http_client.get.side_effect = full_page
+        with patch(
+            "src.api.webhook.get_github_http_client",
+            return_value=http_client,
+        ):
+            result = webhook.extract_changed_files("pull_request", payload)
+
+        assert http_client.get.call_count == webhook.GITHUB_PR_FILES_MAX_PAGES
+        assert len(result) == 1_000
+        assert http_client.get.call_args.kwargs["params"]["page"] == 10
 
     def test_skips_non_reviewable_pr_actions(self):
         payload = {

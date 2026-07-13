@@ -1,8 +1,17 @@
+import logging
 import os
 import re
 import redis
+from redis.backoff import ExponentialBackoff
+from redis.retry import Retry
 from rq import Worker, Queue
 from dotenv import load_dotenv
+from src.config import (
+    CODEGUARD_APP_ID,
+    REDIS_RETRY_ATTEMPTS,
+    REDIS_RETRY_BASE_DELAY_SECONDS,
+    REDIS_RETRY_MAX_DELAY_SECONDS,
+)
 from src.context.context_builder import ContextBuilder
 from src.orchestration.orchestrator import Orchestrator
 from src.github.github_client import GitHubClient
@@ -10,13 +19,33 @@ from src.utils.formatters import format_pr_comment, format_bug_issue, format_bug
 
 load_dotenv()
 
+logger = logging.getLogger(__name__)
 REDIS_URL_SCHEMES = ("redis://", "rediss://", "unix://")
-CODEGUARD_STATUS_CONTEXT = "codeguard-ai"
+REVIEW_ANALYSIS_FALLBACK_MESSAGE = "Error: all LLM providers failed."
 BLOCKING_SEVERITY_RE = re.compile(
     r"^\s*(?:[-*]\s*)?(?:#+\s*)?(?:\d+\.\s*)?(critical|high)\b"
     r"|\b(critical|high)\s+severity\b",
     re.IGNORECASE,
 )
+
+
+class RedisConfigurationError(RuntimeError):
+    """Sanitized Redis configuration failure safe for logs and tracebacks."""
+
+    MESSAGES = {
+        "invalid_url": (
+            "Redis connection URL is invalid. See the deployment documentation "
+            "for supported configuration formats."
+        ),
+        "missing": (
+            "Redis connection is not configured. See the deployment documentation "
+            "for supported Railway Redis settings."
+        ),
+    }
+
+    def __init__(self, reason: str):
+        self.reason = reason
+        super().__init__(self.MESSAGES.get(reason, "Redis configuration is invalid."))
 
 
 def get_redis_url() -> str:
@@ -29,10 +58,7 @@ def get_redis_url() -> str:
         if value.startswith(REDIS_URL_SCHEMES):
             return value
 
-        raise ValueError(
-            f"{name} must start with one of {', '.join(REDIS_URL_SCHEMES)}. "
-            "Set it to the full Redis connection URL from Railway, not just host:port."
-        )
+        raise RedisConfigurationError("invalid_url")
 
     host = os.getenv("REDISHOST") or os.getenv("REDIS_HOST")
     port = os.getenv("REDISPORT") or os.getenv("REDIS_PORT") or "6379"
@@ -43,10 +69,7 @@ def get_redis_url() -> str:
         auth = f":{password}@" if password else ""
         return f"redis://{auth}{host}:{port}"
 
-    raise RuntimeError(
-        "Redis connection is not configured. Set REDIS_URL to a full URL like "
-        "redis://default:<password>@<host>:<port> or connect a Railway Redis service."
-    )
+    raise RedisConfigurationError("missing")
 
 
 def get_redis_connection():
@@ -56,6 +79,13 @@ def get_redis_connection():
             os.getenv("REDIS_SOCKET_CONNECT_TIMEOUT_SECONDS", "5")
         ),
         socket_timeout=float(os.getenv("REDIS_SOCKET_TIMEOUT_SECONDS", "5")),
+        retry=Retry(
+            ExponentialBackoff(
+                cap=REDIS_RETRY_MAX_DELAY_SECONDS,
+                base=REDIS_RETRY_BASE_DELAY_SECONDS,
+            ),
+            retries=REDIS_RETRY_ATTEMPTS,
+        ),
     )
 
 
@@ -83,6 +113,21 @@ def review_status_for_result(review_result: str) -> tuple[str, str]:
     return "success", "CodeGuard found no blocking issues"
 
 
+def log_llm_completion(
+    analysis_type: str,
+    result_length: int,
+    status: str | None = None,
+) -> None:
+    """Log completion metadata without exposing model-generated content."""
+    metadata = {"analysis_type": analysis_type}
+    if status is not None:
+        metadata["analysis_status"] = status
+    if os.getenv("DEBUG_LLM_OUTPUT") == "1":
+        metadata["result_length"] = result_length
+
+    logger.info("LLM analysis completed", extra=metadata)
+
+
 def process_github_review(
     owner: str,
     repo: str,
@@ -93,8 +138,8 @@ def process_github_review(
     head_owner: str | None = None,
 ):
     """
-    Job function yang dijalankan oleh worker.
-    Dipanggil dari queue — bukan dari webhook langsung.
+    Job function executed by the worker.
+    Called from the queue rather than directly from the webhook.
     """
 
     print(f"[Worker] Processing review for {owner}/{repo} ref={ref}")
@@ -104,7 +149,7 @@ def process_github_review(
         ref,
         "pending",
         "CodeGuard review is running",
-        context=CODEGUARD_STATUS_CONTEXT,
+        context=CODEGUARD_APP_ID,
         target_url=status_target_url,
     )
 
@@ -119,7 +164,7 @@ def process_github_review(
                 ref,
                 "success",
                 "CodeGuard found no analyzable files",
-                context=CODEGUARD_STATUS_CONTEXT,
+                context=CODEGUARD_APP_ID,
                 target_url=status_target_url,
             )
             return
@@ -127,20 +172,21 @@ def process_github_review(
         # Orchestration → LLM
         orchestrator = Orchestrator()
         result = orchestrator.review_code(context)
+        if result is None:
+            result = REVIEW_ANALYSIS_FALLBACK_MESSAGE
 
-        print("\n[Worker] === LLM REVIEW RESULT ===")
-        print(result)
+        log_llm_completion("github_review", len(result))
 
         state, description = review_status_for_result(result)
         github.set_commit_status(
             ref,
             state,
             description,
-            context=CODEGUARD_STATUS_CONTEXT,
+            context=CODEGUARD_APP_ID,
             target_url=status_target_url,
         )
 
-        # Output → post ke GitHub
+        # Output → post to GitHub
         pr_number = pr_number or (
             github.get_open_pr_for_branch(branch, head_owner=head_owner) if branch else None
         )
@@ -157,7 +203,7 @@ def process_github_review(
             ref,
             "error",
             "CodeGuard worker failed",
-            context=CODEGUARD_STATUS_CONTEXT,
+            context=CODEGUARD_APP_ID,
             target_url=status_target_url,
         )
         raise
@@ -171,14 +217,14 @@ def process_sentry_job(
     error_file: str,
     error_line: int | None,
     related_file_paths: list[str],
-):
+) -> None:
     """
-    Job function yang dijalankan oleh worker untuk Sentry error.
-    Dipanggil dari queue — bukan dari webhook langsung.
+    Job function executed by the worker for a Sentry error.
+    Called from the queue rather than directly from the webhook.
 
-    related_file_paths: file path dari stack trace Sentry, dipakai
-    ContextBuilder untuk fetch isi file (peran serupa changed_files
-    di process_github_review, tapi sumbernya stack trace bukan diff PR).
+    related_file_paths contains paths from the Sentry stack trace. ContextBuilder
+    uses them to fetch file contents, similarly to changed_files in
+    process_github_review, except the source is a stack trace rather than a PR diff.
     """
 
     print(f"[Worker] Processing Sentry error for {owner}/{repo}: {error_type}")
@@ -193,7 +239,7 @@ def process_sentry_job(
     github = GitHubClient(owner, repo)
     default_branch = github.get_default_branch()
 
-    # Context Builder — fetch file dari stack trace, bukan dari PR diff
+    # Context Builder — fetch files from the stack trace, not a PR diff
     cb = ContextBuilder(owner, repo, ref=default_branch)
     context = cb.build(related_file_paths)
 
@@ -201,23 +247,24 @@ def process_sentry_job(
         print("[Worker] No analyzable files from stack trace — skipping")
         return
 
-    # Orchestration → LLM (structured, dengan schema validation)
+    # Orchestration → LLM (structured, with schema validation)
     orchestrator = Orchestrator()
     analysis = orchestrator.fix_bug(context, error)
 
     if analysis is None:
-        # Semua provider gagal (token habis, validasi schema gagal, atau
-        # koneksi error). Jangan crash atau diam -- fallback ke
-        # Level 1 minimal: Issue manual dengan raw error data.
-        print("[Worker] Sentry analysis gagal untuk semua provider — fallback ke manual issue")
+        # All providers failed due to exhausted tokens, schema validation, or a
+        # connection error. Fall back to a minimal manual issue with raw error data.
+        print("[Worker] Sentry analysis failed for all providers — creating a manual issue")
         title = f"🐛 [Bug] {error_type}"
         body = format_bug_fallback_issue(error)
         github.create_issue(title, body, labels=["bug", "needs-manual-review"])
         return
 
-    print("\n[Worker] === BUG ANALYSIS RESULT ===")
-    print(f"Status: {analysis.status}")
-    print(f"Root cause: {analysis.root_cause}")
+    log_llm_completion(
+        "sentry_bug",
+        len(analysis.root_cause),
+        status=analysis.status,
+    )
 
     title = f"🐛 [Bug] {error_type} in {analysis.affected_file}"
     body = format_bug_issue(analysis, error)

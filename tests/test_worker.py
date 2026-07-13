@@ -1,8 +1,21 @@
+from types import NoneType
+from typing import get_type_hints
 from unittest.mock import MagicMock, patch
 
+import logging
 import pytest
 
+from src.config import (
+    DEFAULT_REPOSITORY_BRANCH,
+    REDIS_RETRY_ATTEMPTS,
+    REDIS_RETRY_BASE_DELAY_SECONDS,
+    REDIS_RETRY_MAX_DELAY_SECONDS,
+)
 from src.worker import worker
+
+
+def test_process_sentry_job_has_none_return_type():
+    assert get_type_hints(worker.process_sentry_job)["return"] is NoneType
 
 
 def clear_redis_env(monkeypatch):
@@ -38,14 +51,34 @@ def test_get_redis_url_builds_from_host_port_password(monkeypatch):
 
 def test_get_redis_url_rejects_url_without_scheme(monkeypatch):
     clear_redis_env(monkeypatch)
-    monkeypatch.setenv("REDIS_URL", "redis.railway.internal:6379")
+    invalid_url = "not-redis://default:super-secret@redis.internal:6379"
+    monkeypatch.setenv("REDIS_URL", invalid_url)
 
     try:
         worker.get_redis_url()
-    except ValueError as exc:
-        assert "must start with" in str(exc)
+    except worker.RedisConfigurationError as exc:
+        message = str(exc)
+        assert "Redis connection URL is invalid" in message
+        assert "super-secret" not in message
+        assert invalid_url not in message
+        assert "REDIS_URL" not in message
+        assert exc.reason == "invalid_url"
+        assert exc.__context__ is None
     else:
-        raise AssertionError("Expected ValueError")
+        raise AssertionError("Expected RedisConfigurationError")
+
+
+def test_missing_redis_configuration_message_has_no_credential_template(monkeypatch):
+    clear_redis_env(monkeypatch)
+
+    with pytest.raises(worker.RedisConfigurationError) as exc_info:
+        worker.get_redis_url()
+
+    message = str(exc_info.value)
+    assert "password" not in message.lower()
+    assert "redis://" not in message
+    assert "REDIS_URL" not in message
+    assert exc_info.value.reason == "missing"
 
 
 def test_get_redis_connection_sets_socket_timeouts(monkeypatch):
@@ -57,11 +90,16 @@ def test_get_redis_connection_sets_socket_timeouts(monkeypatch):
     with patch("src.worker.worker.redis.from_url") as from_url:
         worker.get_redis_connection()
 
-    from_url.assert_called_once_with(
-        "redis://default:secret@redis.railway.internal:6379",
-        socket_connect_timeout=5.0,
-        socket_timeout=5.0,
-    )
+    from_url.assert_called_once()
+    args, kwargs = from_url.call_args
+    assert args == ("redis://default:secret@redis.railway.internal:6379",)
+    assert kwargs["socket_connect_timeout"] == 5.0
+    assert kwargs["socket_timeout"] == 5.0
+
+    retry = kwargs["retry"]
+    assert retry._retries == REDIS_RETRY_ATTEMPTS
+    assert retry._backoff._base == REDIS_RETRY_BASE_DELAY_SECONDS
+    assert retry._backoff._cap == REDIS_RETRY_MAX_DELAY_SECONDS
 
 
 def test_has_blocking_findings_detects_high_and_critical():
@@ -77,7 +115,7 @@ def test_has_blocking_findings_ignores_non_blocking_summary():
 def test_github_review_uses_pr_number_from_webhook():
     context_builder = MagicMock()
     context_builder.build.return_value = {
-        "changed_files": {"src/app.py": "print('ok')"},
+        "changed_files": {"src/app.py": "changed content"},
         "related_files": {},
     }
     orchestrator = MagicMock()
@@ -108,7 +146,7 @@ def test_github_review_uses_pr_number_from_webhook():
 def test_github_review_sets_failure_status_for_blocking_findings():
     context_builder = MagicMock()
     context_builder.build.return_value = {
-        "changed_files": {"src/app.py": "print('ok')"},
+        "changed_files": {"src/app.py": "changed content"},
         "related_files": {},
     }
     orchestrator = MagicMock()
@@ -130,6 +168,78 @@ def test_github_review_sets_failure_status_for_blocking_findings():
 
     assert github.set_commit_status.call_args_list[0].args[:2] == ("abc123", "pending")
     assert github.set_commit_status.call_args_list[1].args[:2] == ("abc123", "failure")
+
+
+def test_github_review_handles_llm_failure_fallback():
+    context_builder = MagicMock()
+    context_builder.build.return_value = {
+        "changed_files": {"src/app.py": "changed content"},
+        "related_files": {},
+    }
+    orchestrator = MagicMock()
+    orchestrator.review_code.return_value = None
+    github = MagicMock()
+
+    with patch("src.worker.worker.ContextBuilder", return_value=context_builder), patch(
+        "src.worker.worker.Orchestrator",
+        return_value=orchestrator,
+    ), patch("src.worker.worker.GitHubClient", return_value=github):
+        worker.process_github_review(
+            "ariefeko",
+            "tagihin",
+            "abc123",
+            "feature/test",
+            ["src/app.py"],
+            pr_number=42,
+        )
+
+    assert github.set_commit_status.call_args_list[1].args[:2] == ("abc123", "error")
+    posted_body = github.post_pr_comment.call_args.args[1]
+    assert worker.REVIEW_ANALYSIS_FALLBACK_MESSAGE in posted_body
+
+
+def test_github_review_does_not_log_llm_content(
+    monkeypatch,
+    caplog,
+    capsys,
+):
+    sensitive_result = "PRIVATE_CODE: api_key = top-secret"
+    monkeypatch.setenv("DEBUG_LLM_OUTPUT", "1")
+    context_builder = MagicMock()
+    context_builder.build.return_value = {
+        "changed_files": {"src/app.py": "changed content"},
+        "related_files": {},
+    }
+    orchestrator = MagicMock()
+    orchestrator.review_code.return_value = sensitive_result
+    github = MagicMock()
+
+    with caplog.at_level(logging.INFO), patch(
+        "src.worker.worker.ContextBuilder",
+        return_value=context_builder,
+    ), patch(
+        "src.worker.worker.Orchestrator",
+        return_value=orchestrator,
+    ), patch("src.worker.worker.GitHubClient", return_value=github):
+        worker.process_github_review(
+            "ariefeko",
+            "tagihin",
+            "abc123",
+            "feature/test",
+            ["src/app.py"],
+            pr_number=42,
+        )
+
+    captured = capsys.readouterr()
+    assert sensitive_result not in captured.out
+    assert sensitive_result not in caplog.text
+    record = next(
+        record
+        for record in caplog.records
+        if record.getMessage() == "LLM analysis completed"
+    )
+    assert record.analysis_type == "github_review"
+    assert record.result_length == len(sensitive_result)
 
 
 def test_github_review_sets_success_status_when_no_analyzable_files():
@@ -183,7 +293,7 @@ def test_github_review_sets_error_status_when_worker_fails():
 def test_github_review_falls_back_to_branch_lookup_with_head_owner():
     context_builder = MagicMock()
     context_builder.build.return_value = {
-        "changed_files": {"src/app.py": "print('ok')"},
+        "changed_files": {"src/app.py": "changed content"},
         "related_files": {},
     }
     orchestrator = MagicMock()
@@ -214,13 +324,13 @@ def test_github_review_falls_back_to_branch_lookup_with_head_owner():
 def test_sentry_job_fetches_context_from_default_branch(bug_analysis_factory):
     context_builder = MagicMock()
     context_builder.build.return_value = {
-        "changed_files": {"src/app.py": "raise RuntimeError()"},
+        "changed_files": {"src/app.py": "changed content"},
         "related_files": {},
     }
     orchestrator = MagicMock()
     orchestrator.fix_bug.return_value = bug_analysis_factory(affected_file="src/app.py")
     github = MagicMock()
-    github.get_default_branch.return_value = "develop"
+    github.get_default_branch.return_value = DEFAULT_REPOSITORY_BRANCH
 
     with patch("src.worker.worker.GitHubClient", return_value=github), patch(
         "src.worker.worker.ContextBuilder",
@@ -239,5 +349,9 @@ def test_sentry_job_fetches_context_from_default_branch(bug_analysis_factory):
             ["src/app.py"],
         )
 
-    context_builder_cls.assert_called_once_with("ariefeko", "tagihin", ref="develop")
+    context_builder_cls.assert_called_once_with(
+        "ariefeko",
+        "tagihin",
+        ref=DEFAULT_REPOSITORY_BRANCH,
+    )
     github.create_issue.assert_called_once()

@@ -2,7 +2,7 @@
 
 def build_code_review_prompt(context: dict, search_results: dict = None) -> str:
     """
-    Susun prompt code review dari context dict.
+    Build a code review prompt from a context dictionary.
     context = {
         "changed_files": {"path": "content"},
         "related_files": {"path": "content"},
@@ -35,11 +35,18 @@ def build_code_review_prompt(context: dict, search_results: dict = None) -> str:
             lines.append(f"\n[{path}]")
             lines.append(add_line_numbers(content))
 
+    rag_context, latest_references = split_rag_from_references(search_results)
+
+    if rag_context:
+        lines.append("\n=== CURATED RAG KNOWLEDGE ===")
+        lines.append("Use these high-confidence curated snippets where relevant:")
+        lines.append(rag_context)
+
     # Tavily search results
-    if search_results:
+    if latest_references:
         lines.append("\n=== LATEST SECURITY & BEST PRACTICE REFERENCES ===")
         lines.append("Use the following up-to-date information to enrich your review:")
-        for key, value in search_results.items():
+        for key, value in latest_references.items():
             label = key.replace("_", " ").upper()
             lines.append(f"\n[{label}]")
             lines.append(value)
@@ -57,8 +64,7 @@ def build_code_review_prompt(context: dict, search_results: dict = None) -> str:
 
 def build_bug_fix_prompt(context: dict, error: dict, search_results: dict = None) -> str:
     """
-    Prompt untuk Sentry error — bug fix.
-    Dipakai nanti saat Sentry webhook diintegrasikan.
+    Build a bug-fix prompt for a Sentry error.
     """
     lines = []
 
@@ -84,11 +90,18 @@ def build_bug_fix_prompt(context: dict, error: dict, search_results: dict = None
             lines.append(f"\n[{path}]")
             lines.append(add_line_numbers(content))
 
+    rag_context, latest_references = split_rag_from_references(search_results)
+
+    if rag_context:
+        lines.append("\n=== CURATED RAG KNOWLEDGE ===")
+        lines.append("Use these high-confidence curated snippets where relevant:")
+        lines.append(rag_context)
+
     # Tavily search results
-    if search_results:
+    if latest_references:
         lines.append("\n=== LATEST REFERENCES ===")
         lines.append("Use the following information to enrich your fix suggestion:")
-        for key, value in search_results.items():
+        for key, value in latest_references.items():
             label = key.replace("_", " ").upper()
             lines.append(f"\n[{label}]")
             lines.append(value)
@@ -113,9 +126,22 @@ def build_bug_fix_prompt(context: dict, error: dict, search_results: dict = None
 
 
 def add_line_numbers(content: str) -> str:
-    """Tambahkan nomor baris ke content file."""
+    """Add line numbers to file contents."""
     lines = content.splitlines()
     numbered = []
     for i, line in enumerate(lines, start=1):
         numbered.append(f"{i:4d} | {line}")
     return "\n".join(numbered)
+
+
+def split_rag_from_references(search_results: dict | None) -> tuple[str, dict]:
+    if not search_results:
+        return "", {}
+
+    rag_context = str(search_results.get("rag") or "").strip()
+    latest_references = {
+        key: value
+        for key, value in search_results.items()
+        if key != "rag" and value
+    }
+    return rag_context, latest_references
