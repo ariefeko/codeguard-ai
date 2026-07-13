@@ -3,7 +3,12 @@ import os
 from typing import Any
 
 import httpx
-from src.config import CODEGUARD_APP_ID, HTTP_REQUEST_TIMEOUT_SECONDS
+from src.config import (
+    CODEGUARD_APP_ID,
+    DEFAULT_REPOSITORY_BRANCH,
+    GITHUB_STATUS_DESCRIPTION_MAX_LENGTH,
+    HTTP_REQUEST_TIMEOUT_SECONDS,
+)
 from src.github.http_client import build_github_headers, get_github_http_client
 from src.github.repo_policy import is_repo_allowed, is_valid_repo_name
 
@@ -83,6 +88,29 @@ class GitHubClient:
             },
         )
 
+    @staticmethod
+    def _log_request_exception(exc: httpx.HTTPError, operation: str) -> None:
+        if isinstance(exc, httpx.TimeoutException):
+            category = "timeout"
+            status_code = None
+        elif isinstance(exc, httpx.HTTPStatusError):
+            category = "http_status"
+            status_code = exc.response.status_code
+        else:
+            category = "transport_error"
+            status_code = None
+
+        logger.warning(
+            "GitHub API request raised an exception",
+            extra={
+                "github_operation": operation,
+                "github_error_category": category,
+                "exception_class": type(exc).__name__,
+                "status_code": status_code,
+            },
+            exc_info=True,
+        )
+
     def set_commit_status(
         self,
         sha: str,
@@ -101,7 +129,7 @@ class GitHubClient:
         url = f"{self.base_url}/statuses/{sha}"
         payload = {
             "state": state,
-            "description": description[:140],
+            "description": description[:GITHUB_STATUS_DESCRIPTION_MAX_LENGTH],
             "context": context,
         }
         if target_url:
@@ -120,11 +148,14 @@ class GitHubClient:
 
             self._log_http_failure(response, "setting commit status")
             return False
-        except httpx.HTTPError:
-            logger.exception(
-                "GitHub HTTP error while setting commit status",
-                extra={"github_operation": "setting commit status"},
-            )
+        except httpx.TimeoutException as exc:
+            self._log_request_exception(exc, "setting commit status")
+            return False
+        except httpx.HTTPStatusError as exc:
+            self._log_request_exception(exc, "setting commit status")
+            return False
+        except httpx.RequestError as exc:
+            self._log_request_exception(exc, "setting commit status")
             return False
 
     def get_default_branch(self) -> str:
@@ -152,13 +183,14 @@ class GitHubClient:
                     return default_branch
 
             self._log_http_failure(response, "getting the default branch")
-        except httpx.HTTPError:
-            logger.exception(
-                "GitHub HTTP error while getting the default branch",
-                extra={"github_operation": "getting the default branch"},
-            )
+        except httpx.TimeoutException as exc:
+            self._log_request_exception(exc, "getting the default branch")
+        except httpx.HTTPStatusError as exc:
+            self._log_request_exception(exc, "getting the default branch")
+        except httpx.RequestError as exc:
+            self._log_request_exception(exc, "getting the default branch")
 
-        return os.getenv("CODEGUARD_DEFAULT_BRANCH", "main")
+        return os.getenv("CODEGUARD_DEFAULT_BRANCH", DEFAULT_REPOSITORY_BRANCH)
 
     def get_open_pr_for_branch(self, branch: str, head_owner: str | None = None) -> int | None:
         """
@@ -198,11 +230,14 @@ class GitHubClient:
             else:
                 self._log_http_failure(response, "getting open pull requests")
                 return None
-        except httpx.HTTPError:
-            logger.exception(
-                "GitHub HTTP error while getting open pull requests",
-                extra={"github_operation": "getting open pull requests"},
-            )
+        except httpx.TimeoutException as exc:
+            self._log_request_exception(exc, "getting open pull requests")
+            return None
+        except httpx.HTTPStatusError as exc:
+            self._log_request_exception(exc, "getting open pull requests")
+            return None
+        except httpx.RequestError as exc:
+            self._log_request_exception(exc, "getting open pull requests")
             return None
 
     def post_pr_comment(self, pr_number: int, body: str) -> bool:
@@ -233,11 +268,14 @@ class GitHubClient:
             else:
                 self._log_http_failure(response, "posting a pull request comment")
                 return False
-        except httpx.HTTPError:
-            logger.exception(
-                "GitHub HTTP error while posting a pull request comment",
-                extra={"github_operation": "posting a pull request comment"},
-            )
+        except httpx.TimeoutException as exc:
+            self._log_request_exception(exc, "posting a pull request comment")
+            return False
+        except httpx.HTTPStatusError as exc:
+            self._log_request_exception(exc, "posting a pull request comment")
+            return False
+        except httpx.RequestError as exc:
+            self._log_request_exception(exc, "posting a pull request comment")
             return False
 
     def create_issue(self, title: str, body: str, labels: list[str] | None = None) -> bool:
@@ -277,9 +315,12 @@ class GitHubClient:
             else:
                 self._log_http_failure(response, "creating an issue")
                 return False
-        except httpx.HTTPError:
-            logger.exception(
-                "GitHub HTTP error while creating an issue",
-                extra={"github_operation": "creating an issue"},
-            )
+        except httpx.TimeoutException as exc:
+            self._log_request_exception(exc, "creating an issue")
+            return False
+        except httpx.HTTPStatusError as exc:
+            self._log_request_exception(exc, "creating an issue")
+            return False
+        except httpx.RequestError as exc:
+            self._log_request_exception(exc, "creating an issue")
             return False

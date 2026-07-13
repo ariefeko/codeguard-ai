@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import logging
 import pytest
 
+from src.config import DEFAULT_REPOSITORY_BRANCH
 from src.worker import worker
 
 
@@ -319,7 +320,7 @@ def test_sentry_job_fetches_context_from_default_branch(bug_analysis_factory):
     orchestrator = MagicMock()
     orchestrator.fix_bug.return_value = bug_analysis_factory(affected_file="src/app.py")
     github = MagicMock()
-    github.get_default_branch.return_value = "develop"
+    github.get_default_branch.return_value = DEFAULT_REPOSITORY_BRANCH
 
     with patch("src.worker.worker.GitHubClient", return_value=github), patch(
         "src.worker.worker.ContextBuilder",
@@ -338,5 +339,9 @@ def test_sentry_job_fetches_context_from_default_branch(bug_analysis_factory):
             ["src/app.py"],
         )
 
-    context_builder_cls.assert_called_once_with("ariefeko", "tagihin", ref="develop")
+    context_builder_cls.assert_called_once_with(
+        "ariefeko",
+        "tagihin",
+        ref=DEFAULT_REPOSITORY_BRANCH,
+    )
     github.create_issue.assert_called_once()

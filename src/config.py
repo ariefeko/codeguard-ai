@@ -3,6 +3,8 @@ import os
 
 CODEGUARD_APP_ID = "codeguard-ai"
 CODEGUARD_REPOSITORY_URL = f"https://github.com/ariefeko/{CODEGUARD_APP_ID}"
+GITHUB_STATUS_DESCRIPTION_MAX_LENGTH = 140
+DEFAULT_REPOSITORY_BRANCH = "main"
 
 
 def read_positive_float_env(name: str, default: float) -> float:

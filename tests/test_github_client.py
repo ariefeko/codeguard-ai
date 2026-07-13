@@ -15,6 +15,7 @@ import httpx
 import pytest
 from src.github.github_client import GitHubClient
 from src.github.repo_policy import RepositoryAllowlistNotConfiguredError
+from src.config import DEFAULT_REPOSITORY_BRANCH, GITHUB_STATUS_DESCRIPTION_MAX_LENGTH
 
 
 @pytest.fixture
@@ -90,7 +91,7 @@ class TestSetCommitStatus:
             client.set_commit_status("abc123", "success", "x" * 200)
 
         payload = mock_post.call_args.kwargs["json"]
-        assert len(payload["description"]) == 140
+        assert len(payload["description"]) == GITHUB_STATUS_DESCRIPTION_MAX_LENGTH
 
     def test_rejects_invalid_state(self, client):
         with pytest.raises(ValueError):
@@ -102,6 +103,22 @@ class TestSetCommitStatus:
 
         with patch("httpx.post", return_value=mock_resp):
             assert client.set_commit_status("abc123", "success", "ok") is False
+
+    def test_timeout_is_classified_in_log(self, client, caplog):
+        with caplog.at_level(logging.WARNING), patch(
+            "httpx.post",
+            side_effect=httpx.ReadTimeout("request timed out"),
+        ):
+            assert client.set_commit_status("abc123", "success", "ok") is False
+
+        record = next(
+            record
+            for record in caplog.records
+            if record.name == "src.github.github_client"
+        )
+        assert record.github_error_category == "timeout"
+        assert record.exception_class == "ReadTimeout"
+        assert record.github_operation == "setting commit status"
 
     def test_authentication_failure_is_classified_in_log(self, client, caplog):
         mock_resp = MagicMock()
@@ -334,7 +351,7 @@ class TestGetDefaultBranch:
         monkeypatch.setenv("CODEGUARD_DEFAULT_BRANCH", "develop")
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        mock_resp.json.return_value = {"default_branch": "main"}
+        mock_resp.json.return_value = {"default_branch": DEFAULT_REPOSITORY_BRANCH}
 
         with patch("httpx.get") as mock_get:
             assert client.get_default_branch() == "develop"
@@ -344,10 +361,10 @@ class TestGetDefaultBranch:
         monkeypatch.delenv("CODEGUARD_DEFAULT_BRANCH", raising=False)
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        mock_resp.json.return_value = {"default_branch": "main"}
+        mock_resp.json.return_value = {"default_branch": DEFAULT_REPOSITORY_BRANCH}
 
         with patch("httpx.get", return_value=mock_resp):
-            assert client.get_default_branch() == "main"
+            assert client.get_default_branch() == DEFAULT_REPOSITORY_BRANCH
 
     def test_falls_back_to_env_default_branch(self, client, monkeypatch):
         monkeypatch.delenv("CODEGUARD_DEFAULT_BRANCH", raising=False)
@@ -355,7 +372,7 @@ class TestGetDefaultBranch:
         mock_resp.status_code = 500
 
         with patch("httpx.get", return_value=mock_resp):
-            assert client.get_default_branch() == "main"
+            assert client.get_default_branch() == DEFAULT_REPOSITORY_BRANCH
 
     def test_malformed_json_falls_back_to_main(self, client, monkeypatch):
         monkeypatch.delenv("CODEGUARD_DEFAULT_BRANCH", raising=False)
@@ -364,7 +381,7 @@ class TestGetDefaultBranch:
         mock_resp.json.side_effect = ValueError("invalid JSON")
 
         with patch("httpx.get", return_value=mock_resp):
-            assert client.get_default_branch() == "main"
+            assert client.get_default_branch() == DEFAULT_REPOSITORY_BRANCH
 
     def test_unexpected_json_shape_falls_back_to_main(self, client, monkeypatch):
         monkeypatch.delenv("CODEGUARD_DEFAULT_BRANCH", raising=False)
@@ -373,4 +390,4 @@ class TestGetDefaultBranch:
         mock_resp.json.return_value = ["not", "an", "object"]
 
         with patch("httpx.get", return_value=mock_resp):
-            assert client.get_default_branch() == "main"
+            assert client.get_default_branch() == DEFAULT_REPOSITORY_BRANCH
