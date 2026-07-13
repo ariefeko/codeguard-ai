@@ -8,7 +8,7 @@ from src.orchestration.schemas import BugAnalysis
 
 @pytest.fixture
 def sample_sentry_issue_payload():
-    """Payload yang mengikuti jalur utama data.issue.data.*."""
+    """Build a payload that follows the primary data.issue.data.* path."""
     return {
         "action": "created",
         "data": {
@@ -85,7 +85,7 @@ def bug_analysis_factory(valid_bug_analysis_data):
 
 @pytest.fixture
 def llm_response_factory():
-    """Membuat response OpenAI-compatible tanpa melakukan HTTP request."""
+    """Build an OpenAI-compatible response without making an HTTP request."""
     def factory(content, status_code=200, append_done=False):
         response = MagicMock()
         response.status_code = status_code

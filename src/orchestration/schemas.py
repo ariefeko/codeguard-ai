@@ -1,9 +1,9 @@
 """
 src/orchestration/schemas.py
 
-Output contract untuk analisis bug Sentry.
-Ini BUKAN dokumentasi — ini validator yang dipanggil orchestrator
-setelah tiap response LLM, terlepas dari provider mana yang jawab.
+Output contract for Sentry bug analysis.
+This is executable validation rather than documentation. The orchestrator
+invokes it after every LLM response regardless of provider.
 """
 import json
 from typing import Literal
@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field, ValidationError
 class InferenceClaim(BaseModel):
     claim: str
     confidence: Literal["high", "medium", "low"]
-    basis: str  # wajib merujuk baris/field spesifik dari input, bukan klaim mengambang
+    basis: str  # Must cite a specific input line or field rather than an unsupported claim.
 
 
 class BugAnalysis(BaseModel):
@@ -25,18 +25,19 @@ class BugAnalysis(BaseModel):
     quick_fix_code: str
     prevention: str
     inferences: list[InferenceClaim] = Field(default_factory=list)
-    insufficient_data_reason: str | None = None  # wajib diisi kalau status INSUFFICIENT_DATA
+    # Required when status is INSUFFICIENT_DATA.
+    insufficient_data_reason: str | None = None
 
 
 def parse_llm_envelope(raw_response_text: str) -> dict | None:
     """
-    Dipanggil DI ORCHESTRATOR, langsung setelah `requests.post(...)`, SEBELUM
-    apa pun lain diproses. Khusus menangani bug OpenAgentic yang nempelin
-    SSE terminator "data: [DONE]" langsung setelah penutup JSON envelope,
-    bahkan untuk non-streaming request -- dikonfirmasi via testing terhadap
-    DeepSeek V4 Flash, GLM-5, dan Groq Llama 3.3 (18 Jun 2026).
+    Called by the orchestrator immediately after the HTTP request and before
+    any other processing. Handles an OpenAgentic behavior that appends the SSE
+    terminator "data: [DONE]" after the JSON envelope even for non-streaming
+    requests, confirmed with DeepSeek V4 Flash, GLM-5, and Groq Llama 3.3 on
+    June 18, 2026.
 
-    Return None kalau envelope-nya sendiri rusak total (bukan cuma soal DONE).
+    Return None when the envelope itself is malformed.
     """
     text = raw_response_text.strip()
     if text.endswith("data: [DONE]"):
@@ -49,7 +50,7 @@ def parse_llm_envelope(raw_response_text: str) -> dict | None:
 
 
 def extract_content(envelope: dict) -> str | None:
-    """Ambil field content dari struktur OpenAI-compatible response."""
+    """Extract the content field from an OpenAI-compatible response structure."""
     try:
         return envelope["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError):
@@ -58,14 +59,13 @@ def extract_content(envelope: dict) -> str | None:
 
 def validate_llm_output(raw_text: str) -> BugAnalysis | None:
     """
-    Dipanggil orchestrator dengan CONTENT yang sudah diekstrak (bukan raw
-    HTTP response envelope -- itu sudah ditangani parse_llm_envelope() +
-    extract_content() di atas).
-    Return None kalau validasi gagal -> trigger retry/fallback ke provider berikutnya.
+    Validate content already extracted by the orchestrator. The raw HTTP
+    response envelope is handled by parse_llm_envelope() and extract_content().
+    Return None on validation failure to trigger the next provider fallback.
     """
-    # Handle providers yang tidak support JSON mode native, atau yang tetap
-    # membungkus output dengan markdown fence meski response_format sudah diset
-    # (dikonfirmasi terjadi pada GLM-5 meski response_format: json_object aktif).
+    # Handle providers without native JSON mode and providers that retain a
+    # Markdown fence despite response_format: json_object. This behavior was
+    # confirmed with GLM-5.
     cleaned = raw_text.strip()
     if "```json" in cleaned:
         cleaned = cleaned.split("```json")[1].split("```")[0].strip()

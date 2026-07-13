@@ -11,7 +11,7 @@ from src.github.http_client import build_github_headers, get_github_http_client
 
 logger = logging.getLogger(__name__)
 
-# Regex import per bahasa
+# Import patterns by language
 IMPORT_PATTERNS = {
     ".php": [
         r"use\s+([\w\\]+);",
@@ -80,7 +80,7 @@ class ContextBuilder:
         """
         owner : GitHub username, e.g. "ariefeko"
         repo  : repo name, e.g. "tagihin"
-        ref   : commit SHA atau branch, e.g. "abc123" atau "develop"
+        ref   : commit SHA or branch, e.g. "abc123" or "develop"
         """
         self.owner = owner
         self.repo = repo
@@ -89,13 +89,13 @@ class ContextBuilder:
         self.headers = build_github_headers(self.token)
         self.http_client = http_client or get_github_http_client()
         self.base_url = f"https://api.github.com/repos/{owner}/{repo}/contents"
-        self._repo_tree_cache = None  # cache tree agar tidak fetch berulang
+        self._repo_tree_cache = None  # Cache the tree to avoid repeated requests.
 
     def build(self, changed_files: list[str]) -> dict:
         """
-        Entry point utama.
-        Input : list path file yang berubah (dari webhook)
-        Output: dict siap kirim ke LLM
+        Main entry point.
+        Input: paths of changed files from the webhook.
+        Output: a dictionary ready to send to the LLM.
         """
         analyzable = self._filter(changed_files)
 
@@ -119,7 +119,7 @@ class ContextBuilder:
         }
 
     def _filter(self, files: list[str]) -> list[str]:
-        """Buang file yang tidak perlu dianalisis."""
+        """Discard files that do not need analysis."""
         result = []
         for f in files:
             if not isinstance(f, str) or not f or "\x00" in f:
@@ -153,7 +153,7 @@ class ContextBuilder:
         return result
 
     def _fetch_file(self, file_path: str) -> str | None:
-        """Fetch satu file dari GitHub API, return isi sebagai string."""
+        """Fetch one file from the GitHub API and return its contents as a string."""
         url = f"{self.base_url}/{file_path}?ref={self.ref}"
         try:
             response = self.http_client.get(
@@ -173,7 +173,7 @@ class ContextBuilder:
             return None
 
     def _fetch_files(self, files: list[str]) -> dict:
-        """Fetch banyak file sekaligus."""
+        """Fetch multiple files."""
         result = {}
         for f in files:
             content = self._fetch_file(f)
@@ -182,7 +182,7 @@ class ContextBuilder:
         return result
 
     def _get_repo_tree(self) -> list:
-        """Fetch repo tree sekali, cache untuk reuse."""
+        """Fetch the repository tree once and cache it for reuse."""
         if self._repo_tree_cache is not None:
             return self._repo_tree_cache
 
@@ -204,7 +204,7 @@ class ContextBuilder:
             return []
 
     def extract_dependencies(self, file_path: str, content: str) -> list[str]:
-        """Extract import/require dari content file."""
+        """Extract import and require statements from file contents."""
         path = Path(file_path)
         patterns = IMPORT_PATTERNS.get(path.suffix, [])
         if not patterns or not content:
@@ -218,7 +218,7 @@ class ContextBuilder:
         return deps
 
     def find_related_files(self, file_path: str, content: str) -> list[str]:
-        """Dari import yang ditemukan, resolve ke path file di repo."""
+        """Resolve discovered imports to repository file paths."""
         deps = self.extract_dependencies(file_path, content)
         path = Path(file_path)
         related = []
@@ -231,7 +231,7 @@ class ContextBuilder:
         return related
 
     def _resolve_dep(self, dep: str, source_file: Path) -> str | None:
-        """Resolve dependency string ke path file aktual."""
+        """Resolve a dependency string to an actual file path."""
         suffix = source_file.suffix
 
         if suffix == ".php":
@@ -268,7 +268,7 @@ class ContextBuilder:
         return None
 
     def _search_file_in_tree(self, name: str, ext: str) -> str | None:
-        """Cari file by nama di repo tree (pakai cache)."""
+        """Find a file by name in the cached repository tree."""
         tree = self._get_repo_tree()
         target = f"{name}{ext}"
 

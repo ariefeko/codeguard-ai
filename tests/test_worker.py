@@ -5,7 +5,12 @@ from unittest.mock import MagicMock, patch
 import logging
 import pytest
 
-from src.config import DEFAULT_REPOSITORY_BRANCH
+from src.config import (
+    DEFAULT_REPOSITORY_BRANCH,
+    REDIS_RETRY_ATTEMPTS,
+    REDIS_RETRY_BASE_DELAY_SECONDS,
+    REDIS_RETRY_MAX_DELAY_SECONDS,
+)
 from src.worker import worker
 
 
@@ -85,11 +90,16 @@ def test_get_redis_connection_sets_socket_timeouts(monkeypatch):
     with patch("src.worker.worker.redis.from_url") as from_url:
         worker.get_redis_connection()
 
-    from_url.assert_called_once_with(
-        "redis://default:secret@redis.railway.internal:6379",
-        socket_connect_timeout=5.0,
-        socket_timeout=5.0,
-    )
+    from_url.assert_called_once()
+    args, kwargs = from_url.call_args
+    assert args == ("redis://default:secret@redis.railway.internal:6379",)
+    assert kwargs["socket_connect_timeout"] == 5.0
+    assert kwargs["socket_timeout"] == 5.0
+
+    retry = kwargs["retry"]
+    assert retry._retries == REDIS_RETRY_ATTEMPTS
+    assert retry._backoff._base == REDIS_RETRY_BASE_DELAY_SECONDS
+    assert retry._backoff._cap == REDIS_RETRY_MAX_DELAY_SECONDS
 
 
 def test_has_blocking_findings_detects_high_and_critical():

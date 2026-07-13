@@ -1,21 +1,19 @@
 """
 src/agents/sentry_agent.py
 
-Parser untuk payload webhook Sentry. Extract data penting (error type,
-message, file, line) dari struktur payload Sentry, dan verifikasi
-signature supaya request benar-benar dari Sentry.
+Parse Sentry webhook payloads, extract essential error data (type, message,
+file, and line), and verify that requests genuinely originate from Sentry.
 
-CATATAN PENTING:
-Sentry punya dua jalur pengiriman webhook dengan struktur payload BEDA:
-1. Resource "error" (data.error.*) -- hanya tersedia di plan Business/
-   Enterprise. TIDAK tersedia di Developer plan (gratis) yang dipakai
-   project ini.
-2. Issue Alert webhook (data.event.*) -- tersedia di semua plan
-   termasuk Developer (gratis). Ini yang realistis dipakai sekarang.
+IMPORTANT:
+Sentry has two webhook delivery paths with different payload structures:
+1. The "error" resource (data.error.*) is available only on Business and
+   Enterprise plans, not the Developer plan currently used by this project.
+2. Issue Alert webhooks (data.event.*) are available on every plan, including
+   Developer, and are the practical integration path currently in use.
 
-Parser ini robust terhadap KEDUANYA -- coba data.error dulu, fallback
-ke data.event -- supaya tetap jalan kalau suatu saat plan di-upgrade
-atau Sentry mengubah jalur pengiriman default.
+The parser supports both paths. It tries data.error first and falls back to
+data.event so it continues to work after a plan upgrade or a change in
+Sentry's default delivery path.
 
 Referensi: https://docs.sentry.io/organization/integrations/integration-platform/webhooks/
 """
@@ -25,18 +23,18 @@ import os
 
 
 class SentryAgent:
-    """Parser payload webhook Sentry -- bukan filesystem scanner."""
+    """Parse Sentry webhook payloads; this is not a filesystem scanner."""
 
     def verify_signature(self, raw_body: bytes, signature_header: str | None) -> bool:
         """
-        Verifikasi Sentry-Hook-Signature header.
-        HMAC SHA-256 dari raw request body, pakai Client Secret sebagai key.
-        Return False kalau secret tidak diset atau signature tidak cocok --
-        caller (webhook.py) WAJIB reject request kalau ini False.
+        Verify the Sentry-Hook-Signature header.
+        Compute HMAC SHA-256 over the raw body using the client secret as key.
+        Return False when the secret is missing or the signature does not match;
+        the webhook caller must reject the request in either case.
         """
         secret = os.getenv("SENTRY_CLIENT_SECRET")
         if not secret:
-            print("[SentryAgent] SENTRY_CLIENT_SECRET tidak diset -- menolak request")
+            print("[SentryAgent] SENTRY_CLIENT_SECRET is not configured — rejecting request")
             return False
 
         computed = hmac.new(
@@ -51,34 +49,34 @@ class SentryAgent:
         has_expected_length = len(provided) == len(computed)
 
         if not signature_header:
-            print("[SentryAgent] Tidak ada Sentry-Hook-Signature header")
+            print("[SentryAgent] Sentry-Hook-Signature header is missing")
         elif not has_expected_length or not matches:
-            print("[SentryAgent] Sentry-Hook-Signature tidak valid")
+            print("[SentryAgent] Sentry-Hook-Signature is invalid")
 
         return bool(signature_header) and has_expected_length and matches
 
     def parse_error(self, payload: dict) -> dict | None:
         """
-        Extract error context dari payload Sentry.
-        Return dict dengan keys: type, message, file, line, related_file_paths.
-        Return None kalau payload tidak punya struktur error yang dikenali
-        (misal payload installation/comment, bukan issue/error/alert).
+        Extract error context from a Sentry payload.
+        Return a dictionary containing type, message, file, line, and
+        related_file_paths. Return None when the payload has no recognized
+        error structure, such as installation or comment payloads.
 
-        STRUKTUR DIKONFIRMASI dari payload asli (20 Jun 2026, ModelNotFoundException
-        dari Tagihin via Issue Alert webhook):
-            data.issue.data.exception.values[].stacktrace.frames[]  -- detail lengkap
-            data.issue.data.metadata                                -- ringkasan, sudah
-                                                                        di-pre-filter Sentry
-                                                                        ke frame in_app paling
-                                                                        relevan
-        metadata jadi sumber utama (lebih simpel, sudah dipilihkan Sentry sendiri),
-        exception.values[].stacktrace.frames[] jadi fallback + sumber related_file_paths.
+        Confirmed structure from a real Tagihin ModelNotFoundException payload
+        received through an Issue Alert webhook on June 20, 2026:
+            data.issue.data.exception.values[].stacktrace.frames[]  -- full details
+            data.issue.data.metadata                                -- Sentry-filtered
+                                                                       summary for the
+                                                                       most relevant
+                                                                       in_app frame
+        Metadata is the primary source because Sentry already selects the most
+        relevant frame. Stack trace frames provide the fallback and related paths.
         """
         data = payload.get("data", {})
 
-        # issue_id dari Sentry -- dipakai sebagai deduplication key di Redis.
-        # Untuk resource=issue: ada di data.issue.id
-        # Untuk resource=event_alert: ada di data.issue_id atau data.issue.id
+        # Use the Sentry issue_id as the Redis deduplication key.
+        # For resource=issue it is in data.issue.id.
+        # For resource=event_alert it is in data.issue_id or data.issue.id.
         issue = data.get("issue", {})
         issue_id = (
             str(issue.get("id", ""))
@@ -87,7 +85,7 @@ class SentryAgent:
             or ""
         )
 
-        # Jalur utama yang TERKONFIRMASI: data.issue.data.*
+        # Confirmed primary path: data.issue.data.*
         issue_data = issue.get("data", issue) if isinstance(issue, dict) else {}
 
         if issue_data.get("metadata") or issue_data.get("exception"):
@@ -96,50 +94,50 @@ class SentryAgent:
                 result["issue_id"] = issue_id
             return result
 
-        # Jalur fallback 1: resource "error" langsung (Business/Enterprise)
+        # Fallback 1: direct "error" resource (Business/Enterprise)
         if "error" in data:
             result = self._parse_from_error_resource(data["error"])
             if result:
                 result["issue_id"] = issue_id
             return result
 
-        # Jalur fallback 2: data.event langsung
+        # Fallback 2: direct data.event
         if "event" in data:
             result = self._parse_from_event_resource(data["event"])
             if result:
                 result["issue_id"] = issue_id
             return result
 
-        # Jalur fallback 3: state change tanpa detail exception
+        # Fallback 3: state change without exception details
         if issue:
-            print("[SentryAgent] Payload issue tanpa metadata/exception -- skip analysis")
+            print("[SentryAgent] Issue payload has no metadata or exception — skipping analysis")
             return None
 
-        print(f"[SentryAgent] Struktur payload tidak dikenali. Keys: {list(data.keys())}")
+        print(f"[SentryAgent] Unrecognized payload structure. Keys: {list(data.keys())}")
         return None
 
     @staticmethod
     def _strip_leading_slash(filepath: str) -> str:
         """
-        Sentry kasih path absolut container (/app/Livewire/Tagihan/Index.php),
-        tapi GitHub API butuh path relatif ke root repo (app/Livewire/Tagihan/Index.php).
-        Confirmed dari payload asli: semua filename punya leading slash.
+        Sentry provides absolute container paths (/app/Livewire/Tagihan/Index.php),
+        while the GitHub API requires repository-relative paths
+        (app/Livewire/Tagihan/Index.php). Real payloads consistently include a
+        leading slash.
         """
         return filepath.lstrip("/") if filepath else filepath
 
     def _parse_from_issue_data(self, issue_data: dict) -> dict | None:
         """
-        Parse data.issue.data.* -- struktur TERKONFIRMASI dari payload asli.
-        metadata sudah berisi filename/function yang sudah Sentry pre-filter ke
-        frame in_app paling relevan -- jadi pakai ini sebagai sumber utama,
-        bukan filter manual dari exception.values[].stacktrace.frames[].
+        Parse data.issue.data.* using the structure confirmed from real payloads.
+        Metadata contains the filename and function prefiltered by Sentry to the
+        most relevant in_app frame, so it is the primary source instead of a
+        manual scan of exception.values[].stacktrace.frames[].
         """
         metadata = issue_data.get("metadata", {})
         exception_values = issue_data.get("exception", {}).get("values", [])
 
-        # related_file_paths tetap perlu digali dari stacktrace frames lengkap,
-        # karena metadata cuma kasih SATU file (yang paling relevan), bukan semua
-        # file in_app yang ikut terlibat di call stack.
+        # Collect related paths from all stack trace frames because metadata
+        # provides only the single most relevant file, not every in_app file.
         related_paths = []
         if exception_values:
             frames = exception_values[0].get("stacktrace", {}).get("frames", [])
@@ -150,21 +148,20 @@ class SentryAgent:
             })
 
         if metadata.get("filename"):
-            # Sumber utama: metadata, sudah dipilihkan Sentry
+            # Primary source: metadata selected by Sentry.
             file_path = self._strip_leading_slash(metadata.get("filename", ""))
 
-            # metadata kadang punya field "lineno"/"line" langsung -- cek dulu
-            # sebelum coba gali dari exception.values (yang bisa saja kosong,
-            # terutama untuk payload jenis "issue" tanpa detail exception baru,
-            # misal action=unresolved/escalated yang cuma state change).
+            # Metadata may contain a direct "lineno" or "line" field. Check it
+            # before scanning exception values, which may be empty for issue
+            # state changes such as unresolved or escalated actions.
             line = metadata.get("lineno") or metadata.get("line")
             if line is None and exception_values:
                 line = self._extract_line_for_file(exception_values, metadata.get("filename", ""))
 
             if line is None:
                 print(
-                    f"[SentryAgent] Line number tidak ditemukan untuk {file_path} -- "
-                    f"exception_values kosong: {not exception_values}, "
+                    f"[SentryAgent] Line number was not found for {file_path} — "
+                    f"exception_values empty: {not exception_values}, "
                     f"metadata keys: {list(metadata.keys())}"
                 )
 
@@ -176,7 +173,7 @@ class SentryAgent:
                 "related_file_paths": related_paths or [file_path],
             }
 
-        # Fallback: metadata tidak ada filename, gali manual dari exception frames
+        # Fallback: scan exception frames when metadata has no filename.
         if exception_values:
             primary = exception_values[0]
             frames = primary.get("stacktrace", {}).get("frames", [])
@@ -191,14 +188,14 @@ class SentryAgent:
                 "related_file_paths": related_paths,
             }
 
-        print("[SentryAgent] issue_data tidak punya metadata.filename maupun exception.values")
+        print("[SentryAgent] issue_data has neither metadata.filename nor exception.values")
         return None
 
     @staticmethod
     def _extract_line_for_file(exception_values: list, filename: str) -> int | None:
         """
-        metadata tidak selalu menyertakan line number secara langsung -- gali
-        dari frame yang filename-nya cocok dengan metadata.filename.
+        Metadata does not always include a line number directly, so find it in
+        the frame whose filename matches metadata.filename.
         """
         if not exception_values:
             return None
@@ -209,17 +206,17 @@ class SentryAgent:
         return None
 
     def _parse_from_error_resource(self, error: dict) -> dict | None:
-        """Parse data.error.* -- struktur resource 'error' (Business/Enterprise)."""
+        """Parse data.error.* using the Business/Enterprise error resource structure."""
         exception_values = error.get("exception", {}).get("values", [])
         if not exception_values:
-            print("[SentryAgent] data.error tidak punya exception.values")
+            print("[SentryAgent] data.error has no exception.values")
             return None
 
         primary = exception_values[0]
         frames = primary.get("stacktrace", {}).get("frames", [])
 
-        # Frame paling relevan biasanya yang terakhir (paling dekat ke titik crash)
-        # dan in_app=True (kode milik project, bukan dependency/library)
+        # The most relevant frame is usually the final in_app frame closest to
+        # the crash point, representing project rather than dependency code.
         in_app_frames = [f for f in frames if f.get("in_app")]
         target_frame = in_app_frames[-1] if in_app_frames else (frames[-1] if frames else {})
 
@@ -238,9 +235,9 @@ class SentryAgent:
 
     def _parse_from_event_resource(self, event: dict) -> dict | None:
         """
-        Parse data.event.* -- struktur Issue Alert webhook (Developer plan).
-        Field exact bisa bervariasi tergantung platform (JS/Python/PHP dll)
-        -- ambil dengan fallback berlapis, jangan asumsikan satu bentuk pasti.
+        Parse data.event.* using the Developer-plan Issue Alert structure.
+        Exact fields vary by platform, so use layered fallbacks rather than
+        assuming one fixed shape.
         """
         exception_values = event.get("exception", {}).get("values", [])
 
@@ -263,14 +260,14 @@ class SentryAgent:
                 "related_file_paths": related_paths,
             }
 
-        # Fallback minimal -- event ada tapi tidak ada exception/stacktrace
-        # detail (jarang, tapi jangan crash, kasih apa yang ada)
+        # Minimal fallback for the rare event that has no exception or stack
+        # trace details: preserve the available title without crashing.
         title = event.get("title", "")
         if not title:
-            print("[SentryAgent] data.event tidak punya exception maupun title")
+            print("[SentryAgent] data.event has neither an exception nor a title")
             return None
 
-        print("[SentryAgent] data.event tidak punya stacktrace detail -- fallback ke title saja")
+        print("[SentryAgent] data.event has no stack trace details — using the title only")
         return {
             "type": event.get("metadata", {}).get("type", "Unknown"),
             "message": title,

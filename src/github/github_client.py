@@ -1,11 +1,17 @@
 import logging
+import math
 import os
+import time
+from collections.abc import Callable
 from typing import Any
 
 import httpx
 from src.config import (
     CODEGUARD_APP_ID,
     DEFAULT_REPOSITORY_BRANCH,
+    GITHUB_RETRY_BASE_DELAY_SECONDS,
+    GITHUB_RETRY_MAX_ATTEMPTS,
+    GITHUB_RETRY_MAX_DELAY_SECONDS,
     GITHUB_STATUS_DESCRIPTION_MAX_LENGTH,
     HTTP_REQUEST_TIMEOUT_SECONDS,
 )
@@ -23,6 +29,7 @@ class GitHubClient:
         owner: str,
         repo: str,
         http_client: httpx.Client | None = None,
+        sleep: Callable[[float], None] | None = None,
     ):
         if not is_valid_repo_name(owner, repo):
             raise ValueError("Invalid owner or repo name format")
@@ -35,12 +42,101 @@ class GitHubClient:
         self.token = os.getenv("GITHUB_PAT_TOKEN")
         self.headers = build_github_headers(self.token)
         self.http_client = http_client or get_github_http_client()
+        self._sleep = sleep or time.sleep
         self.base_url = f"https://api.github.com/repos/{owner}/{repo}"
+
+    @staticmethod
+    def _is_transient_response(response: httpx.Response) -> bool:
+        return (
+            response.status_code == 429
+            or response.status_code >= 500
+            or (
+                response.status_code == 403
+                and response.headers.get("X-RateLimit-Remaining") == "0"
+            )
+        )
+
+    @staticmethod
+    def _is_transient_exception(exc: httpx.RequestError) -> bool:
+        return isinstance(
+            exc,
+            (
+                httpx.TimeoutException,
+                httpx.NetworkError,
+                httpx.ProxyError,
+                httpx.RemoteProtocolError,
+            ),
+        )
+
+    @staticmethod
+    def _retry_delay(response: httpx.Response | None, attempt: int) -> float:
+        retry_after = (
+            response.headers.get("Retry-After")
+            if response is not None
+            else None
+        )
+        if retry_after is not None:
+            try:
+                retry_after_seconds = float(retry_after)
+                if math.isfinite(retry_after_seconds) and retry_after_seconds >= 0:
+                    return min(
+                        retry_after_seconds,
+                        GITHUB_RETRY_MAX_DELAY_SECONDS,
+                    )
+            except (TypeError, ValueError):
+                pass
+
+        return min(
+            GITHUB_RETRY_BASE_DELAY_SECONDS * (2 ** (attempt - 1)),
+            GITHUB_RETRY_MAX_DELAY_SECONDS,
+        )
+
+    def _request_with_retry(
+        self,
+        method: str,
+        url: str,
+        *,
+        operation: str,
+        **kwargs: Any,
+    ) -> httpx.Response:
+        request = getattr(self.http_client, method)
+        for attempt in range(1, GITHUB_RETRY_MAX_ATTEMPTS + 1):
+            response = None
+            try:
+                response = request(url, **kwargs)
+                if not self._is_transient_response(response):
+                    return response
+            except httpx.RequestError as exc:
+                if not self._is_transient_exception(exc):
+                    raise
+                if attempt == GITHUB_RETRY_MAX_ATTEMPTS:
+                    raise
+
+            if attempt == GITHUB_RETRY_MAX_ATTEMPTS:
+                if response is None:
+                    raise RuntimeError("GitHub request completed without a response")
+                return response
+
+            delay = self._retry_delay(response, attempt)
+            logger.warning(
+                "Retrying transient GitHub API failure",
+                extra={
+                    "github_operation": operation,
+                    "retry_attempt": attempt + 1,
+                    "retry_delay_seconds": delay,
+                    "status_code": (
+                        response.status_code if response is not None else None
+                    ),
+                },
+            )
+            self._sleep(delay)
+
+        raise RuntimeError("GitHub retry loop ended unexpectedly")
 
     @staticmethod
     def _parse_json_response(
         response: httpx.Response,
-        expected_type: type,
+        expected_type: type[Any],
         operation: str,
     ) -> Any | None:
         """Parse a GitHub response without allowing malformed JSON to escape."""
@@ -136,8 +232,10 @@ class GitHubClient:
             payload["target_url"] = target_url
 
         try:
-            response = self.http_client.post(
+            response = self._request_with_retry(
+                "post",
                 url,
+                operation="setting commit status",
                 headers=self.headers,
                 json=payload,
                 timeout=HTTP_REQUEST_TIMEOUT_SECONDS,
@@ -159,15 +257,17 @@ class GitHubClient:
             return False
 
     def get_default_branch(self) -> str:
-        """Ambil branch target untuk Sentry context, env override lebih dulu."""
+        """Get the target branch for Sentry context, preferring the environment override."""
         env_branch = os.getenv("CODEGUARD_DEFAULT_BRANCH")
         if env_branch:
             print(f"[GitHubClient] Default branch override: {env_branch}")
             return env_branch
 
         try:
-            response = self.http_client.get(
+            response = self._request_with_retry(
+                "get",
                 self.base_url,
+                operation="getting the default branch",
                 headers=self.headers,
                 timeout=HTTP_REQUEST_TIMEOUT_SECONDS,
             )
@@ -194,14 +294,16 @@ class GitHubClient:
 
     def get_open_pr_for_branch(self, branch: str, head_owner: str | None = None) -> int | None:
         """
-        Cari PR yang open untuk branch tertentu.
-        Return PR number kalau ada, None kalau tidak ada.
+        Find an open pull request for a branch.
+        Return its number when found, otherwise None.
         """
         owner = head_owner or self.owner
         url = f"{self.base_url}/pulls"
         try:
-            response = self.http_client.get(
+            response = self._request_with_retry(
+                "get",
                 url,
+                operation="getting open pull requests",
                 headers=self.headers,
                 params={"state": "open", "head": f"{owner}:{branch}"},
                 timeout=HTTP_REQUEST_TIMEOUT_SECONDS,
@@ -242,8 +344,8 @@ class GitHubClient:
 
     def post_pr_comment(self, pr_number: int, body: str) -> bool:
         """
-        Post comment ke PR.
-        Return True kalau berhasil.
+        Post a pull request comment.
+        Return True on success.
         """
         if (
             not isinstance(pr_number, int)
@@ -256,8 +358,10 @@ class GitHubClient:
         url = f"{self.base_url}/issues/{pr_number}/comments"
         payload = {"body": body}
         try:
-            response = self.http_client.post(
+            response = self._request_with_retry(
+                "post",
                 url,
+                operation="posting a pull request comment",
                 headers=self.headers,
                 json=payload,
                 timeout=HTTP_REQUEST_TIMEOUT_SECONDS,
@@ -280,10 +384,10 @@ class GitHubClient:
 
     def create_issue(self, title: str, body: str, labels: list[str] | None = None) -> bool:
         """
-        Buat GitHub Issue — fallback kalau tidak ada PR, atau entry point
-        untuk Sentry bug analysis.
-        labels default [CODEGUARD_APP_ID] kalau tidak di-pass -- perilaku
-        lama (dipanggil dari process_github_review) tidak berubah.
+        Create a GitHub issue as a fallback when there is no pull request or
+        as the entry point for Sentry bug analysis.
+        Labels default to [CODEGUARD_APP_ID] when omitted, preserving the
+        existing process_github_review behavior.
         """
         url = f"{self.base_url}/issues"
         payload = {
@@ -292,8 +396,10 @@ class GitHubClient:
             "labels": labels if labels is not None else [CODEGUARD_APP_ID],
         }
         try:
-            response = self.http_client.post(
+            response = self._request_with_retry(
+                "post",
                 url,
+                operation="creating an issue",
                 headers=self.headers,
                 json=payload,
                 timeout=HTTP_REQUEST_TIMEOUT_SECONDS,

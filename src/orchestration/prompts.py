@@ -2,7 +2,7 @@
 
 def build_code_review_prompt(context: dict, search_results: dict = None) -> str:
     """
-    Susun prompt code review dari context dict.
+    Build a code review prompt from a context dictionary.
     context = {
         "changed_files": {"path": "content"},
         "related_files": {"path": "content"},
@@ -64,8 +64,7 @@ def build_code_review_prompt(context: dict, search_results: dict = None) -> str:
 
 def build_bug_fix_prompt(context: dict, error: dict, search_results: dict = None) -> str:
     """
-    Prompt untuk Sentry error — bug fix.
-    Dipakai nanti saat Sentry webhook diintegrasikan.
+    Build a bug-fix prompt for a Sentry error.
     """
     lines = []
 
@@ -127,7 +126,7 @@ def build_bug_fix_prompt(context: dict, error: dict, search_results: dict = None
 
 
 def add_line_numbers(content: str) -> str:
-    """Tambahkan nomor baris ke content file."""
+    """Add line numbers to file contents."""
     lines = content.splitlines()
     numbered = []
     for i, line in enumerate(lines, start=1):

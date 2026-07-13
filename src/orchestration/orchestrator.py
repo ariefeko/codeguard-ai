@@ -20,7 +20,7 @@ GROQ_URL        = "https://api.groq.com/openai/v1/chat/completions"
 GEMINI_URL      = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
 DEEPSEEK_URL    = "https://api.deepseek.com/v1/chat/completions"
 
-# Fallback chain — semua free tier
+# Fallback chain using free-tier providers.
 PROVIDER_CHAIN = [
     {
         "name"   : "DeepSeek V4 Flash (OpenAgentic)",
@@ -44,9 +44,9 @@ PROVIDER_CHAIN = [
 
 MAX_TOKENS = 2048
 
-# Path Sentry (fix_bug) butuh lebih banyak ruang: DeepSeek menyertakan
-# reasoning_content sebelum jawaban final, dan output JSON terstruktur
-# (BugAnalysis) lebih verbose dari teks bebas komentar PR.
+# The Sentry path needs more room: DeepSeek includes reasoning_content before
+# the final answer, and structured BugAnalysis JSON is more verbose than a
+# free-form pull request comment.
 MAX_TOKENS_STRUCTURED = MAX_TOKENS * 2
 
 
@@ -56,7 +56,7 @@ class Orchestrator:
         self.rag = RAGPipeline()
 
     def review_code(self, context: dict[str, Any]) -> str | None:
-        """Entry point untuk GitHub webhook — code review."""
+        """Run a code review for the GitHub webhook path."""
         search_results = self._enrich_with_search(context)
         prompt = build_code_review_prompt(context, search_results)
         return self._call_llm(prompt)
@@ -67,10 +67,9 @@ class Orchestrator:
         error: dict[str, Any],
     ) -> BugAnalysis | None:
         """
-        Entry point untuk Sentry webhook — bug fix.
-        Return None kalau semua provider gagal menghasilkan output yang
-        valid sesuai BugAnalysis schema -> caller (worker.py) fallback
-        ke manual GitHub Issue tanpa AI analysis.
+        Run bug analysis for the Sentry webhook path.
+        Return None when every provider fails to produce valid BugAnalysis
+        output so the worker can create a manual GitHub issue without analysis.
         """
         search_results = self._search_for_error(error, context)
         prompt = build_bug_fix_prompt(context, error, search_results)
@@ -153,7 +152,7 @@ class Orchestrator:
         return self.rag.format_prompt_snippets(snippets).strip()
 
     def _call_llm(self, prompt: str) -> str | None:
-        """Kirim prompt ke provider dengan fallback chain. Dipakai review_code()."""
+        """Send a prompt through the provider fallback chain for review_code()."""
         for provider in PROVIDER_CHAIN:
             print(f"[Orchestrator] Trying: {provider['name']}")
             result = self._request(prompt, provider)
@@ -166,14 +165,12 @@ class Orchestrator:
 
     def _call_llm_structured(self, prompt: str) -> BugAnalysis | None:
         """
-        Kirim prompt ke provider dengan fallback chain, DAN validasi tiap
-        jawaban terhadap BugAnalysis schema sebelum diterima. Dipakai
-        fix_bug() saja -- review_code() tetap pakai _call_llm() di atas,
-        tidak tersentuh.
+        Send a prompt through the provider fallback chain and validate every
+        response against the BugAnalysis schema before accepting it. This path
+        is used only by fix_bug(); review_code() continues to use _call_llm().
 
-        Kalau provider menjawab tapi gagal validasi schema (bukan error
-        HTTP/koneksi), itu tetap dianggap gagal -> lanjut ke provider
-        berikutnya di chain, sama seperti gagal request biasa.
+        A schema validation failure is treated like a request failure and moves
+        to the next provider in the chain.
         """
         for provider in PROVIDER_CHAIN:
             print(f"[Orchestrator] Trying (structured): {provider['name']}")
@@ -201,10 +198,10 @@ class Orchestrator:
         max_tokens: int = MAX_TOKENS,
     ) -> str | None:
         """
-        Satu request ke provider. Return None kalau gagal.
-        json_mode=True menambahkan response_format: json_object -- dipakai
-        _call_llm_structured() saja. _call_llm() (review_code) tidak
-        terpengaruh karena defaultnya False dan max_tokens default MAX_TOKENS.
+        Send one provider request and return None on failure.
+        json_mode=True adds response_format: json_object for
+        _call_llm_structured() only. The review_code path is unchanged because
+        json_mode defaults to False and max_tokens defaults to MAX_TOKENS.
         """
         api_key = os.getenv(provider["api_key"])
         if not api_key:

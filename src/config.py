@@ -16,6 +16,15 @@ def read_positive_float_env(name: str, default: float) -> float:
     return value if value > 0 else default
 
 
+def read_positive_int_env(name: str, default: int) -> int:
+    """Read a positive integer setting, falling back safely when invalid."""
+    try:
+        value = int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
 HTTP_REQUEST_TIMEOUT_SECONDS = read_positive_float_env(
     "HTTP_REQUEST_TIMEOUT_SECONDS",
     10.0,
@@ -27,6 +36,30 @@ LLM_REQUEST_TIMEOUT_SECONDS = read_positive_float_env(
 QDRANT_SYNC_TIMEOUT_SECONDS = read_positive_float_env(
     "QDRANT_SYNC_TIMEOUT_SECONDS",
     30.0,
+)
+GITHUB_RETRY_MAX_ATTEMPTS = read_positive_int_env(
+    "GITHUB_RETRY_MAX_ATTEMPTS",
+    3,
+)
+GITHUB_RETRY_BASE_DELAY_SECONDS = read_positive_float_env(
+    "GITHUB_RETRY_BASE_DELAY_SECONDS",
+    0.5,
+)
+GITHUB_RETRY_MAX_DELAY_SECONDS = read_positive_float_env(
+    "GITHUB_RETRY_MAX_DELAY_SECONDS",
+    4.0,
+)
+REDIS_RETRY_ATTEMPTS = read_positive_int_env(
+    "REDIS_RETRY_ATTEMPTS",
+    3,
+)
+REDIS_RETRY_BASE_DELAY_SECONDS = read_positive_float_env(
+    "REDIS_RETRY_BASE_DELAY_SECONDS",
+    0.1,
+)
+REDIS_RETRY_MAX_DELAY_SECONDS = read_positive_float_env(
+    "REDIS_RETRY_MAX_DELAY_SECONDS",
+    2.0,
 )
 
 
