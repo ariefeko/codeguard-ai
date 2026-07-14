@@ -312,7 +312,7 @@ class TestSentryDedup:
         assert response.body == b'{"status":"rejected"}'
 
     @pytest.mark.asyncio
-    async def test_leaves_pending_dedup_key_when_enqueue_fails(self, monkeypatch):
+    async def test_clears_pending_dedup_key_when_enqueue_fails(self, monkeypatch):
         monkeypatch.setenv("CODEGUARD_DEFAULT_OWNER", "ariefeko")
         monkeypatch.setenv("CODEGUARD_DEFAULT_REPO", "tagihin")
 
@@ -354,7 +354,43 @@ class TestSentryDedup:
             ex=webhook.SENTRY_DEDUP_PENDING_TTL_SECONDS,
             nx=True,
         )
-        redis_client.delete.assert_not_called()
+        redis_client.delete.assert_called_once_with(
+            "codeguard:sentry:processed:issue-1"
+        )
+
+    @pytest.mark.asyncio
+    async def test_rejects_incomplete_parsed_error_before_enqueue(self, monkeypatch):
+        monkeypatch.setenv("CODEGUARD_DEFAULT_OWNER", "ariefeko")
+        monkeypatch.setenv("CODEGUARD_DEFAULT_REPO", "tagihin")
+
+        request = MagicMock()
+        request.body = AsyncMock(return_value=b"{}")
+        request.headers.get.side_effect = lambda key, default=None: {
+            "Sentry-Hook-Signature": "valid",
+            "Sentry-Hook-Resource": "issue",
+        }.get(key, default)
+
+        queue = MagicMock()
+        with patch("src.api.sentry_webhook.SentryAgent") as agent_cls, patch(
+            "src.api.sentry_webhook.get_redis_connection"
+        ) as get_redis, patch(
+            "src.api.sentry_webhook.get_queue", return_value=queue
+        ):
+            agent = agent_cls.return_value
+            agent.verify_signature.return_value = True
+            agent.parse_error.return_value = {
+                "type": "RuntimeError",
+                "message": "boom",
+            }
+
+            response = await webhook.sentry_webhook(request)
+
+        assert response.status_code == 400
+        assert response.body == (
+            b'{"status":"rejected","reason":"invalid error data"}'
+        )
+        get_redis.assert_not_called()
+        queue.enqueue.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_promotes_dedup_key_after_enqueue_success(self, monkeypatch):

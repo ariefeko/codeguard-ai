@@ -53,6 +53,22 @@ async def sentry_webhook(request: Request):
         print("[webhook] No error context could be extracted — skipping")
         return {"status": "skipped", "reason": "no parseable error data"}
 
+    required_error_fields = (
+        "type",
+        "message",
+        "file",
+        "line",
+        "related_file_paths",
+    )
+    if not isinstance(error, dict) or not all(
+        field in error for field in required_error_fields
+    ):
+        print("[webhook] Parsed error data is invalid — request rejected")
+        return JSONResponse(
+            status_code=400,
+            content={"status": "rejected", "reason": "invalid error data"},
+        )
+
     owner = os.getenv("CODEGUARD_DEFAULT_OWNER")
     repo = os.getenv("CODEGUARD_DEFAULT_REPO")
     if not owner or not repo:
@@ -86,18 +102,23 @@ async def sentry_webhook(request: Request):
     else:
         print("[webhook] No issue_id was provided — skipping deduplication")
 
-    queue = get_queue()
-    job = queue.enqueue(
-        process_sentry_job,
-        owner,
-        repo,
-        error["type"],
-        error["message"],
-        error["file"],
-        error["line"],
-        error["related_file_paths"],
-        job_timeout=120,
-    )
+    try:
+        queue = get_queue()
+        job = queue.enqueue(
+            process_sentry_job,
+            owner,
+            repo,
+            error["type"],
+            error["message"],
+            error["file"],
+            error["line"],
+            error["related_file_paths"],
+            job_timeout=120,
+        )
+    except Exception:
+        if dedup_key and dedup_redis:
+            dedup_redis.delete(dedup_key)
+        raise
 
     if dedup_key and dedup_redis:
         dedup_redis.set(dedup_key, f"queued:{job.id}", ex=SENTRY_DEDUP_TTL_SECONDS)
