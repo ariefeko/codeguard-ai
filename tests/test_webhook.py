@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -51,7 +52,9 @@ class TestGithubSignature:
         response = await webhook.github_webhook(request)
 
         assert response.status_code == 401
-        assert response.body == b'{"status":"rejected"}'
+        assert response.body == (
+            b'{"status":"rejected","reason":"invalid signature"}'
+        )
 
     @pytest.mark.asyncio
     async def test_github_webhook_rejects_malformed_json(self, monkeypatch):
@@ -72,7 +75,9 @@ class TestGithubSignature:
         response = await webhook.github_webhook(request)
 
         assert response.status_code == 400
-        assert response.body == b'{"status":"rejected"}'
+        assert response.body == (
+            b'{"status":"rejected","reason":"invalid JSON payload"}'
+        )
 
     @pytest.mark.asyncio
     async def test_github_webhook_rejects_missing_repository(self, monkeypatch):
@@ -93,7 +98,9 @@ class TestGithubSignature:
         response = await webhook.github_webhook(request)
 
         assert response.status_code == 400
-        assert response.body == b'{"status":"rejected"}'
+        assert response.body == (
+            b'{"status":"rejected","reason":"invalid repository data"}'
+        )
 
 
 class TestRepoPolicy:
@@ -295,7 +302,9 @@ class TestSentryDedup:
             response = await webhook.sentry_webhook(request)
 
         assert response.status_code == 401
-        assert response.body == b'{"status":"rejected"}'
+        assert response.body == (
+            b'{"status":"rejected","reason":"invalid signature"}'
+        )
 
     @pytest.mark.asyncio
     async def test_sentry_webhook_rejects_malformed_json(self):
@@ -309,7 +318,9 @@ class TestSentryDedup:
             response = await webhook.sentry_webhook(request)
 
         assert response.status_code == 400
-        assert response.body == b'{"status":"rejected"}'
+        assert response.body == (
+            b'{"status":"rejected","reason":"invalid JSON payload"}'
+        )
 
     @pytest.mark.asyncio
     async def test_clears_pending_dedup_key_when_enqueue_fails(self, monkeypatch):
@@ -393,9 +404,10 @@ class TestSentryDedup:
         queue.enqueue.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_promotes_dedup_key_after_enqueue_success(self, monkeypatch):
+    async def test_promotes_dedup_key_after_enqueue_success(self, monkeypatch, caplog):
         monkeypatch.setenv("CODEGUARD_DEFAULT_OWNER", "ariefeko")
         monkeypatch.setenv("CODEGUARD_DEFAULT_REPO", "tagihin")
+        caplog.set_level(logging.INFO, logger="src.api.sentry_webhook")
 
         redis_client = MagicMock()
         redis_client.set.return_value = True
@@ -410,9 +422,9 @@ class TestSentryDedup:
         }.get(key, default)
 
         parsed_error = {
-            "type": "RuntimeError",
-            "message": "boom",
-            "file": "src/app.py",
+            "type": "PrivateRuntimeError",
+            "message": "PRIVATE customer payload",
+            "file": "private/customer.py",
             "line": 1,
             "related_file_paths": ["src/app.py"],
             "issue_id": "issue-1",
@@ -444,3 +456,6 @@ class TestSentryDedup:
         assert redis_client.set.call_args_list[1].kwargs == {
             "ex": webhook.SENTRY_DEDUP_TTL_SECONDS,
         }
+        assert "PrivateRuntimeError" not in caplog.text
+        assert "PRIVATE customer payload" not in caplog.text
+        assert "private/customer.py" not in caplog.text

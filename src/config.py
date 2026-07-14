@@ -61,6 +61,10 @@ REDIS_RETRY_MAX_DELAY_SECONDS = read_positive_float_env(
     "REDIS_RETRY_MAX_DELAY_SECONDS",
     2.0,
 )
+RQ_JOB_TIMEOUT_SECONDS = read_positive_int_env(
+    "RQ_JOB_TIMEOUT_SECONDS",
+    120,
+)
 
 
 SUPPORTED_EXTENSIONS = {

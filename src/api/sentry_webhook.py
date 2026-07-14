@@ -1,11 +1,13 @@
 import json
+import logging
 import os
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 
 from src.agents.sentry_agent import SentryAgent
+from src.api.responses import webhook_response
+from src.config import RQ_JOB_TIMEOUT_SECONDS
 from src.worker.redis_connection import get_queue, get_redis_connection
 from src.worker.worker import process_sentry_job
 
@@ -13,6 +15,7 @@ from src.worker.worker import process_sentry_job
 load_dotenv()
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 SENTRY_DEDUP_TTL_SECONDS = 86400
 SENTRY_DEDUP_PENDING_TTL_SECONDS = int(
@@ -28,30 +31,34 @@ async def sentry_webhook(request: Request):
 
     agent = SentryAgent()
     if not agent.verify_signature(raw_body, signature):
-        print("[webhook] Sentry signature verification failed — request rejected")
-        return JSONResponse(
-            status_code=401,
-            content={"status": "rejected"},
-        )
+        logger.warning("Sentry signature verification failed")
+        return webhook_response(401, "rejected", "invalid signature")
 
     try:
         payload = json.loads(raw_body)
     except json.JSONDecodeError:
-        print("[webhook] Sentry payload contains invalid JSON")
-        return JSONResponse(status_code=400, content={"status": "rejected"})
+        logger.warning("Sentry payload contains invalid JSON")
+        return webhook_response(400, "rejected", "invalid JSON payload")
 
     resource = request.headers.get("Sentry-Hook-Resource", "unknown")
     action = payload.get("action", "unknown")
-    print(f"\n=== SENTRY WEBHOOK: resource={resource} action={action} ===")
+    logger.info(
+        "Sentry webhook received",
+        extra={"sentry_resource": resource, "sentry_action": action},
+    )
 
     if resource not in ("error", "issue", "event_alert"):
-        print(f"[webhook] Resource '{resource}' is not relevant — skipping")
-        return {"status": "skipped", "reason": f"resource '{resource}' not handled"}
+        logger.info("Sentry resource skipped", extra={"sentry_resource": resource})
+        return webhook_response(
+            200,
+            "skipped",
+            f"resource '{resource}' not handled",
+        )
 
     error = agent.parse_error(payload)
     if error is None:
-        print("[webhook] No error context could be extracted — skipping")
-        return {"status": "skipped", "reason": "no parseable error data"}
+        logger.info("Sentry payload has no parseable error data")
+        return webhook_response(200, "skipped", "no parseable error data")
 
     required_error_fields = (
         "type",
@@ -63,23 +70,14 @@ async def sentry_webhook(request: Request):
     if not isinstance(error, dict) or not all(
         field in error for field in required_error_fields
     ):
-        print("[webhook] Parsed error data is invalid — request rejected")
-        return JSONResponse(
-            status_code=400,
-            content={"status": "rejected", "reason": "invalid error data"},
-        )
+        logger.warning("Sentry parsed error data is invalid")
+        return webhook_response(400, "rejected", "invalid error data")
 
     owner = os.getenv("CODEGUARD_DEFAULT_OWNER")
     repo = os.getenv("CODEGUARD_DEFAULT_REPO")
     if not owner or not repo:
-        print("[webhook] CODEGUARD_DEFAULT_OWNER/REPO is not configured — target unknown")
-        return JSONResponse(
-            status_code=500,
-            content={"status": "error", "reason": "no repo mapping configured"},
-        )
-
-    print(f"Error: {error['type']} — {error['message']}")
-    print(f"File: {error['file']}:{error['line']}")
+        logger.error("Sentry repository mapping is not configured")
+        return webhook_response(500, "error", "no repo mapping configured")
 
     issue_id = error.get("issue_id", "")
     dedup_key = None
@@ -94,13 +92,10 @@ async def sentry_webhook(request: Request):
             nx=True,
         )
         if not lock_acquired:
-            print(f"[webhook] Issue {issue_id} was already processed — ignoring")
-            return JSONResponse(
-                status_code=200,
-                content={"status": "ignored", "reason": "already processed"},
-            )
+            logger.info("Duplicate Sentry issue ignored")
+            return webhook_response(200, "ignored", "already processed")
     else:
-        print("[webhook] No issue_id was provided — skipping deduplication")
+        logger.info("Sentry issue has no deduplication identifier")
 
     try:
         queue = get_queue()
@@ -113,7 +108,7 @@ async def sentry_webhook(request: Request):
             error["file"],
             error["line"],
             error["related_file_paths"],
-            job_timeout=120,
+            job_timeout=RQ_JOB_TIMEOUT_SECONDS,
         )
     except Exception:
         if dedup_key and dedup_redis:
@@ -123,12 +118,10 @@ async def sentry_webhook(request: Request):
     if dedup_key and dedup_redis:
         dedup_redis.set(dedup_key, f"queued:{job.id}", ex=SENTRY_DEDUP_TTL_SECONDS)
 
-    print(f"[webhook] Sentry job enqueued: {job.id}")
-    return JSONResponse(
-        status_code=202,
-        content={
-            "status": "accepted",
-            "job_id": job.id,
-            "message": "Bug analysis queued — GitHub Issue will appear shortly",
-        },
+    logger.info("Sentry job enqueued", extra={"job_id": job.id})
+    return webhook_response(
+        202,
+        "accepted",
+        "bug analysis queued",
+        job_id=job.id,
     )

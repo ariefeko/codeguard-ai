@@ -447,7 +447,7 @@ class TestRequest:
         self,
         orchestrator,
         monkeypatch,
-        capsys,
+        caplog,
     ):
         provider = PROVIDER_CHAIN[0]
         monkeypatch.setenv(provider["api_key"], "secret")
@@ -458,6 +458,10 @@ class TestRequest:
         ):
             assert orchestrator._request("prompt", provider) is None
 
-        output = capsys.readouterr().out
-        assert "ConnectError" in output
-        assert "certificate verify failed" not in output
+        record = next(
+            record
+            for record in caplog.records
+            if record.getMessage() == "LLM provider transport failure"
+        )
+        assert record.error_type == "ConnectError"
+        assert "certificate verify failed" not in caplog.text

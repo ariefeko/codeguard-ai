@@ -1,5 +1,9 @@
+import logging
 import os
 from tavily import TavilyClient
+
+
+logger = logging.getLogger(__name__)
 
 
 class CodeGuardSearch:
@@ -51,7 +55,7 @@ class CodeGuardSearch:
         Return a summary string ready to include in a prompt.
         """
         try:
-            print(f"[Tavily] Searching: {query}")
+            logger.info("Tavily search started")
             response = self.client.search(
                 query=query,
                 search_depth="basic",
@@ -72,6 +76,9 @@ class CodeGuardSearch:
 
             return None
 
-        except Exception as e:
-            print(f"[Tavily] Error: {e}")
+        except Exception as exc:
+            logger.error(
+                "Tavily search failed",
+                extra={"error_type": type(exc).__name__},
+            )
             return None

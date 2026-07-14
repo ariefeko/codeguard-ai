@@ -241,7 +241,10 @@ class GitHubClient:
                 timeout=HTTP_REQUEST_TIMEOUT_SECONDS,
             )
             if response.status_code == 201:
-                print(f"[GitHubClient] Commit status set: {context}={state}")
+                logger.info(
+                    "GitHub commit status set",
+                    extra={"status_context": context, "status_state": state},
+                )
                 return True
 
             self._log_http_failure(response, "setting commit status")
@@ -260,7 +263,7 @@ class GitHubClient:
         """Get the target branch for Sentry context, preferring the environment override."""
         env_branch = os.getenv("CODEGUARD_DEFAULT_BRANCH")
         if env_branch:
-            print(f"[GitHubClient] Default branch override: {env_branch}")
+            logger.info("Using configured GitHub default branch")
             return env_branch
 
         try:
@@ -279,7 +282,7 @@ class GitHubClient:
                 )
                 default_branch = payload.get("default_branch") if payload else None
                 if isinstance(default_branch, str) and default_branch:
-                    print(f"[GitHubClient] Default branch: {default_branch}")
+                    logger.info("GitHub default branch resolved")
                     return default_branch
 
             self._log_http_failure(response, "getting the default branch")
@@ -321,13 +324,13 @@ class GitHubClient:
                     if not isinstance(first_pr, dict) or not isinstance(
                         first_pr.get("number"), int
                     ):
-                        print("[GitHubClient] Invalid pull request response shape")
+                        logger.warning("Invalid GitHub pull request response shape")
                         return None
                     pr_number = first_pr["number"]
-                    print(f"[GitHubClient] Found open PR #{pr_number} for branch: {owner}:{branch}")
+                    logger.info("Open GitHub pull request found")
                     return pr_number
                 else:
-                    print(f"[GitHubClient] No open PR for branch: {owner}:{branch}")
+                    logger.info("No open GitHub pull request found")
                     return None
             else:
                 self._log_http_failure(response, "getting open pull requests")
@@ -367,7 +370,7 @@ class GitHubClient:
                 timeout=HTTP_REQUEST_TIMEOUT_SECONDS,
             )
             if response.status_code == 201:
-                print(f"[GitHubClient] Comment posted to PR #{pr_number} ✅")
+                logger.info("GitHub pull request comment posted")
                 return True
             else:
                 self._log_http_failure(response, "posting a pull request comment")
@@ -414,9 +417,9 @@ class GitHubClient:
                     return False
                 issue_url = response_payload.get("html_url")
                 if not isinstance(issue_url, str) or not issue_url:
-                    print("[GitHubClient] Invalid issue response shape")
+                    logger.warning("Invalid GitHub issue response shape")
                     return False
-                print(f"[GitHubClient] Issue created: {issue_url} ✅")
+                logger.info("GitHub issue created")
                 return True
             else:
                 self._log_http_failure(response, "creating an issue")

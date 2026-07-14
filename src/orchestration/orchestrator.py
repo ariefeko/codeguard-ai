@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import Any
 
@@ -12,6 +13,9 @@ from src.orchestration.schemas import (
     parse_llm_envelope,
     validate_llm_output,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 # Provider endpoints
@@ -131,7 +135,10 @@ class Orchestrator:
             snippets = self.rag.retrieve_for_context(context)
             return self._format_rag_snippets(snippets)
         except Exception as exc:
-            print(f"[RAG] Review enrichment failed: {type(exc).__name__}")
+            logger.error(
+                "RAG review enrichment failed",
+                extra={"error_type": type(exc).__name__},
+            )
             return ""
 
     def _format_rag_for_error(
@@ -143,7 +150,10 @@ class Orchestrator:
             snippets = self.rag.retrieve_for_error(error, context)
             return self._format_rag_snippets(snippets)
         except Exception as exc:
-            print(f"[RAG] Error enrichment failed: {type(exc).__name__}")
+            logger.error(
+                "RAG error enrichment failed",
+                extra={"error_type": type(exc).__name__},
+            )
             return ""
 
     def _format_rag_snippets(self, snippets: list[RAGSnippet]) -> str:
@@ -154,12 +164,12 @@ class Orchestrator:
     def _call_llm(self, prompt: str) -> str | None:
         """Send a prompt through the provider fallback chain for review_code()."""
         for provider in PROVIDER_CHAIN:
-            print(f"[Orchestrator] Trying: {provider['name']}")
+            logger.info("LLM provider attempt started")
             result = self._request(prompt, provider)
             if result:
-                print(f"[Orchestrator] Success: {provider['name']}")
+                logger.info("LLM provider attempt succeeded")
                 return result
-            print(f"[Orchestrator] Failed: {provider['name']}, trying next...")
+            logger.warning("LLM provider attempt failed")
 
         return None
 
@@ -173,21 +183,21 @@ class Orchestrator:
         to the next provider in the chain.
         """
         for provider in PROVIDER_CHAIN:
-            print(f"[Orchestrator] Trying (structured): {provider['name']}")
+            logger.info("Structured LLM provider attempt started")
             raw_content = self._request(prompt, provider, json_mode=True, max_tokens=MAX_TOKENS_STRUCTURED)
 
             if raw_content is None:
-                print(f"[Orchestrator] Failed (request): {provider['name']}, trying next...")
+                logger.warning("Structured LLM provider request failed")
                 continue
 
             result = validate_llm_output(raw_content)
             if result is not None:
-                print(f"[Orchestrator] Success (structured): {provider['name']}")
+                logger.info("Structured LLM provider attempt succeeded")
                 return result
 
-            print(f"[Orchestrator] Failed (schema validation): {provider['name']}, trying next...")
+            logger.warning("Structured LLM response validation failed")
 
-        print("[Orchestrator] All providers failed structured validation.")
+        logger.error("All structured LLM provider attempts failed")
         return None
 
     def _request(
@@ -205,7 +215,7 @@ class Orchestrator:
         """
         api_key = os.getenv(provider["api_key"])
         if not api_key:
-            print(f"[Orchestrator] Missing API key: {provider['api_key']}")
+            logger.warning("LLM provider API key is missing")
             return None
 
         headers = {
@@ -246,24 +256,33 @@ class Orchestrator:
                         raise ValueError("missing response content")
 
                     return content
-                except Exception as e:
+                except Exception as exc:
                     response_size = len(response.text.encode("utf-8", errors="ignore"))
-                    print(
-                        "[Orchestrator] Provider response parse failed: "
-                        f"{type(e).__name__}; status={response.status_code}; "
-                        f"bytes={response_size}"
+                    logger.warning(
+                        "LLM provider response parsing failed",
+                        extra={
+                            "error_type": type(exc).__name__,
+                            "status_code": response.status_code,
+                            "response_size": response_size,
+                        },
                     )
                     return None
             else:
-                print(f"[Orchestrator] HTTP {response.status_code} from provider")
+                logger.warning(
+                    "LLM provider returned an error response",
+                    extra={"status_code": response.status_code},
+                )
                 return None
 
         except httpx.TransportError as exc:
-            print(
-                "[Orchestrator] Provider TLS/network failure: "
-                f"{type(exc).__name__}"
+            logger.warning(
+                "LLM provider transport failure",
+                extra={"error_type": type(exc).__name__},
             )
             return None
-        except Exception as e:
-            print(f"[Orchestrator] Exception: {e}")
+        except Exception as exc:
+            logger.error(
+                "Unexpected LLM provider failure",
+                extra={"error_type": type(exc).__name__},
+            )
             return None

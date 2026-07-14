@@ -99,7 +99,10 @@ class ContextBuilder:
         """
         analyzable = self._filter(changed_files)
 
-        print(f"[ContextBuilder] Analyzable files: {analyzable}")
+        logger.info(
+            "Repository files filtered for analysis",
+            extra={"file_count": len(analyzable)},
+        )
 
         changed_contents = self._fetch_files(analyzable)
 
@@ -166,10 +169,16 @@ class ContextBuilder:
                 content_b64 = data.get("content", "")
                 return base64.b64decode(content_b64).decode("utf-8")
             else:
-                print(f"[ContextBuilder] Failed to fetch {file_path}: HTTP {response.status_code}")
+                logger.warning(
+                    "Failed to fetch repository file",
+                    extra={"status_code": response.status_code},
+                )
                 return None
-        except Exception as e:
-            print(f"[ContextBuilder] Error fetching {file_path}: {e}")
+        except Exception as exc:
+            logger.error(
+                "Repository file fetch failed",
+                extra={"error_type": type(exc).__name__},
+            )
             return None
 
     def _fetch_files(self, files: list[str]) -> dict:
@@ -197,10 +206,16 @@ class ContextBuilder:
                 self._repo_tree_cache = response.json().get("tree", [])
                 return self._repo_tree_cache
             else:
-                print(f"[ContextBuilder] Failed to fetch repo tree: HTTP {response.status_code}")
+                logger.warning(
+                    "Failed to fetch repository tree",
+                    extra={"status_code": response.status_code},
+                )
                 return []
-        except Exception as e:
-            print(f"[ContextBuilder] Error fetching repo tree: {e}")
+        except Exception as exc:
+            logger.error(
+                "Repository tree fetch failed",
+                extra={"error_type": type(exc).__name__},
+            )
             return []
 
     def extract_dependencies(self, file_path: str, content: str) -> list[str]:

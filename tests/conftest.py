@@ -1,4 +1,5 @@
 import json
+from collections.abc import Callable
 from unittest.mock import MagicMock
 
 import pytest
@@ -75,8 +76,10 @@ def valid_bug_analysis_data():
 
 
 @pytest.fixture
-def bug_analysis_factory(valid_bug_analysis_data):
-    def factory(**overrides):
+def bug_analysis_factory(
+    valid_bug_analysis_data: dict[str, object],
+) -> Callable[..., BugAnalysis]:
+    def factory(**overrides: object) -> BugAnalysis:
         data = {**valid_bug_analysis_data, **overrides}
         return BugAnalysis(**data)
 

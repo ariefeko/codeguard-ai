@@ -1,12 +1,13 @@
 import hashlib
 import hmac
 import json
+import logging
 import os
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
 
-from src.config import HTTP_REQUEST_TIMEOUT_SECONDS
+from src.api.responses import webhook_response
+from src.config import HTTP_REQUEST_TIMEOUT_SECONDS, RQ_JOB_TIMEOUT_SECONDS
 from src.github.http_client import build_github_headers, get_github_http_client
 from src.github.repo_policy import (
     RepositoryAllowlistNotConfiguredError,
@@ -17,6 +18,7 @@ from src.worker.worker import process_github_review
 
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 GITHUB_PR_FILES_PER_PAGE = 100
 GITHUB_PR_FILES_MAX_PAGES = 10
@@ -27,53 +29,47 @@ async def github_webhook(request: Request):
     raw_body = await request.body()
     signature = request.headers.get("X-Hub-Signature-256")
     if not verify_github_signature(raw_body, signature):
-        print("[webhook] GitHub signature verification failed — request rejected")
-        return JSONResponse(
-            status_code=401,
-            content={"status": "rejected"},
+        logger.warning("GitHub signature verification failed")
+        return webhook_response(
+            401,
+            "rejected",
+            "invalid signature",
         )
 
     try:
         payload = json.loads(raw_body)
     except json.JSONDecodeError:
-        print("[webhook] GitHub payload contains invalid JSON")
-        return JSONResponse(status_code=400, content={"status": "rejected"})
+        logger.warning("GitHub payload contains invalid JSON")
+        return webhook_response(400, "rejected", "invalid JSON payload")
 
     event_type = request.headers.get("X-GitHub-Event", "unknown")
-    print(f"\n=== GITHUB WEBHOOK: {event_type} ===")
+    logger.info("GitHub webhook received", extra={"github_event": event_type})
 
     repo_info = extract_repo_info(payload)
     if repo_info is None:
-        print("[webhook] GitHub payload is missing the repository owner or name")
-        return JSONResponse(status_code=400, content={"status": "rejected"})
+        logger.warning("GitHub payload is missing repository identity")
+        return webhook_response(400, "rejected", "invalid repository data")
 
     owner, repo = repo_info
     try:
         repo_allowed = is_repo_allowed(owner, repo)
     except RepositoryAllowlistNotConfiguredError:
-        print("[webhook] GitHub repository allowlist is not configured")
-        return JSONResponse(
-            status_code=503,
-            content={
-                "status": "error",
-                "reason": "repository policy not configured",
-            },
+        logger.error("GitHub repository allowlist is not configured")
+        return webhook_response(
+            503,
+            "error",
+            "repository policy not configured",
         )
 
     if not repo_allowed:
-        print(f"[webhook] GitHub repository is not allowed: {owner}/{repo}")
-        return JSONResponse(
-            status_code=403,
-            content={"status": "rejected"},
-        )
+        logger.warning("GitHub repository is not allowed")
+        return webhook_response(403, "rejected", "repository not allowed")
 
     changed_files = extract_changed_files(event_type, payload)
-    print(f"Changed files ({len(changed_files)}):")
-    for file_path in changed_files:
-        print(f"  - {file_path}")
+    logger.info("GitHub changed files extracted", extra={"file_count": len(changed_files)})
 
     if not changed_files:
-        return {"status": "skipped", "reason": "no changed files"}
+        return webhook_response(200, "skipped", "no changed files")
 
     ref = payload.get("after") or payload.get("pull_request", {}).get("head", {}).get("sha")
     branch = extract_branch(event_type, payload)
@@ -90,17 +86,15 @@ async def github_webhook(request: Request):
         changed_files,
         pr_number,
         head_owner,
-        job_timeout=120,
+        job_timeout=RQ_JOB_TIMEOUT_SECONDS,
     )
 
-    print(f"[webhook] Job enqueued: {job.id}")
-    return JSONResponse(
-        status_code=202,
-        content={
-            "status": "accepted",
-            "job_id": job.id,
-            "message": "Review queued — PR comment will appear shortly",
-        },
+    logger.info("GitHub review job enqueued", extra={"job_id": job.id})
+    return webhook_response(
+        202,
+        "accepted",
+        "review queued",
+        job_id=job.id,
     )
 
 
@@ -125,11 +119,11 @@ def verify_github_signature(raw_body: bytes, signature_header: str | None) -> bo
     """Verify a GitHub webhook HMAC SHA-256 signature."""
     secret = os.getenv("GITHUB_WEBHOOK_SECRET")
     if not secret:
-        print("[webhook] GITHUB_WEBHOOK_SECRET is not configured — rejecting request")
+        logger.error("GitHub webhook secret is not configured")
         return False
 
     if not signature_header or not signature_header.startswith("sha256="):
-        print("[webhook] X-Hub-Signature-256 header is invalid")
+        logger.warning("GitHub signature header is invalid")
         return False
 
     expected = "sha256=" + hmac.new(
@@ -152,7 +146,7 @@ def extract_changed_files(event_type: str, payload: dict) -> list[str]:
     elif event_type == "pull_request":
         action = payload.get("action")
         pr_number = payload.get("number")
-        print(f"PR #{pr_number} action: {action}")
+        logger.info("GitHub pull request event", extra={"pr_action": action})
 
         if action not in ("opened", "synchronize"):
             return []
@@ -172,7 +166,10 @@ def extract_changed_files(event_type: str, payload: dict) -> list[str]:
             )
 
             if response.status_code != 200:
-                print(f"[webhook] Failed to fetch PR files: HTTP {response.status_code}")
+                logger.warning(
+                    "Failed to fetch GitHub pull request files",
+                    extra={"status_code": response.status_code},
+                )
                 break
 
             page_files = response.json()
@@ -183,9 +180,9 @@ def extract_changed_files(event_type: str, payload: dict) -> list[str]:
             if len(page_files) < GITHUB_PR_FILES_PER_PAGE:
                 break
         else:
-            print(
-                "[webhook] PR file pagination limit reached: "
-                f"{GITHUB_PR_FILES_MAX_PAGES} pages"
+            logger.warning(
+                "GitHub pull request file pagination limit reached",
+                extra={"page_limit": GITHUB_PR_FILES_MAX_PAGES},
             )
 
     return list(files)
