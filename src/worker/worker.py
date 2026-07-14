@@ -69,7 +69,7 @@ def process_github_review(
     Called from the queue rather than directly from the webhook.
     """
 
-    print(f"[Worker] Processing review for {owner}/{repo} ref={ref}")
+    logger.info("GitHub review job started")
     github = GitHubClient(owner, repo)
     status_target_url = os.getenv("CODEGUARD_STATUS_TARGET_URL")
     github.set_commit_status(
@@ -86,7 +86,7 @@ def process_github_review(
         context = cb.build(changed_files)
 
         if not context["changed_files"]:
-            print("[Worker] No analyzable files — skipping")
+            logger.info("GitHub review has no analyzable files")
             github.set_commit_status(
                 ref,
                 "success",
@@ -126,13 +126,16 @@ def process_github_review(
             body = format_pr_comment(result)
             github.create_issue(title, body)
     except Exception:
-        github.set_commit_status(
-            ref,
-            "error",
-            "CodeGuard worker failed",
-            context=CODEGUARD_APP_ID,
-            target_url=status_target_url,
-        )
+        try:
+            github.set_commit_status(
+                ref,
+                "error",
+                "CodeGuard worker failed",
+                context=CODEGUARD_APP_ID,
+                target_url=status_target_url,
+            )
+        except Exception:
+            logger.exception("Failed to set error commit status")
         raise
 
 
@@ -154,7 +157,7 @@ def process_sentry_job(
     process_github_review, except the source is a stack trace rather than a PR diff.
     """
 
-    print(f"[Worker] Processing Sentry error for {owner}/{repo}: {error_type}")
+    logger.info("Sentry analysis job started")
 
     error = {
         "type": error_type,
@@ -171,7 +174,7 @@ def process_sentry_job(
     context = cb.build(related_file_paths)
 
     if not context["changed_files"]:
-        print("[Worker] No analyzable files from stack trace — skipping")
+        logger.info("Sentry analysis has no analyzable files")
         return
 
     # Orchestration → LLM (structured, with schema validation)
@@ -181,7 +184,7 @@ def process_sentry_job(
     if analysis is None:
         # All providers failed due to exhausted tokens, schema validation, or a
         # connection error. Fall back to a minimal manual issue with raw error data.
-        print("[Worker] Sentry analysis failed for all providers — creating a manual issue")
+        logger.warning("Sentry analysis providers failed; creating fallback issue")
         title = f"🐛 [Bug] {error_type}"
         body = format_bug_fallback_issue(error)
         github.create_issue(title, body, labels=["bug", "needs-manual-review"])
@@ -202,5 +205,5 @@ if __name__ == "__main__":
     conn = get_redis_connection()
     queue = Queue("codeguard", connection=conn)
     worker = Worker([queue], connection=conn)
-    print("[Worker] Starting RQ worker...")
+    logger.info("RQ worker starting")
     worker.work()

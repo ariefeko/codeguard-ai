@@ -19,7 +19,11 @@ Referensi: https://docs.sentry.io/organization/integrations/integration-platform
 """
 import hashlib
 import hmac
+import logging
 import os
+
+
+logger = logging.getLogger(__name__)
 
 
 class SentryAgent:
@@ -34,7 +38,7 @@ class SentryAgent:
         """
         secret = os.getenv("SENTRY_CLIENT_SECRET")
         if not secret:
-            print("[SentryAgent] SENTRY_CLIENT_SECRET is not configured — rejecting request")
+            logger.error("Sentry client secret is not configured")
             return False
 
         computed = hmac.new(
@@ -45,15 +49,20 @@ class SentryAgent:
 
         provided = (signature_header or "").encode("utf-8")
         normalized = provided.ljust(len(computed), b"\x00")[: len(computed)]
-        matches = hmac.compare_digest(computed, normalized)
-        has_expected_length = len(provided) == len(computed)
+        # Include length validity in the fixed-size value compared so there is
+        # no separate, short-circuiting length check in the return path.
+        expected = computed + b"\x01"
+        candidate = normalized + (
+            b"\x01" if len(provided) == len(computed) else b"\x00"
+        )
+        matches = hmac.compare_digest(expected, candidate)
 
         if not signature_header:
-            print("[SentryAgent] Sentry-Hook-Signature header is missing")
-        elif not has_expected_length or not matches:
-            print("[SentryAgent] Sentry-Hook-Signature is invalid")
+            logger.warning("Sentry signature header is missing")
+        elif not matches:
+            logger.warning("Sentry signature is invalid")
 
-        return bool(signature_header) and has_expected_length and matches
+        return matches
 
     def parse_error(self, payload: dict) -> dict | None:
         """
@@ -110,10 +119,10 @@ class SentryAgent:
 
         # Fallback 3: state change without exception details
         if issue:
-            print("[SentryAgent] Issue payload has no metadata or exception — skipping analysis")
+            logger.info("Sentry issue has no error context")
             return None
 
-        print(f"[SentryAgent] Unrecognized payload structure. Keys: {list(data.keys())}")
+        logger.info("Sentry payload structure is unrecognized")
         return None
 
     @staticmethod
@@ -159,10 +168,9 @@ class SentryAgent:
                 line = self._extract_line_for_file(exception_values, metadata.get("filename", ""))
 
             if line is None:
-                print(
-                    f"[SentryAgent] Line number was not found for {file_path} — "
-                    f"exception_values empty: {not exception_values}, "
-                    f"metadata keys: {list(metadata.keys())}"
+                logger.info(
+                    "Sentry line number was not found",
+                    extra={"has_exception_values": bool(exception_values)},
                 )
 
             return {
@@ -188,7 +196,7 @@ class SentryAgent:
                 "related_file_paths": related_paths,
             }
 
-        print("[SentryAgent] issue_data has neither metadata.filename nor exception.values")
+        logger.info("Sentry issue data has no file or exception values")
         return None
 
     @staticmethod
@@ -209,7 +217,7 @@ class SentryAgent:
         """Parse data.error.* using the Business/Enterprise error resource structure."""
         exception_values = error.get("exception", {}).get("values", [])
         if not exception_values:
-            print("[SentryAgent] data.error has no exception.values")
+            logger.info("Sentry error resource has no exception values")
             return None
 
         primary = exception_values[0]
@@ -264,10 +272,10 @@ class SentryAgent:
         # trace details: preserve the available title without crashing.
         title = event.get("title", "")
         if not title:
-            print("[SentryAgent] data.event has neither an exception nor a title")
+            logger.info("Sentry event has no exception or title")
             return None
 
-        print("[SentryAgent] data.event has no stack trace details — using the title only")
+        logger.info("Sentry event has no stack trace details")
         return {
             "type": event.get("metadata", {}).get("type", "Unknown"),
             "message": title,

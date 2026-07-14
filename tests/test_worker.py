@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from types import NoneType
 from typing import get_type_hints
 from unittest.mock import MagicMock, patch
@@ -6,6 +7,7 @@ import logging
 import pytest
 
 from src.config import DEFAULT_REPOSITORY_BRANCH
+from src.orchestration.schemas import BugAnalysis
 from src.worker import worker
 
 
@@ -201,6 +203,32 @@ def test_github_review_sets_error_status_when_worker_fails():
     assert github.set_commit_status.call_args_list[1].args[:2] == ("abc123", "error")
 
 
+def test_github_review_preserves_worker_error_when_error_status_update_fails(caplog):
+    context_builder = MagicMock()
+    context_builder.build.side_effect = ValueError("original worker failure")
+    github = MagicMock()
+    github.set_commit_status.side_effect = [None, RuntimeError("status failure")]
+
+    with caplog.at_level(logging.ERROR), patch(
+        "src.worker.worker.ContextBuilder",
+        return_value=context_builder,
+    ), patch(
+        "src.worker.worker.GitHubClient",
+        return_value=github,
+    ), pytest.raises(ValueError, match="original worker failure"):
+        worker.process_github_review(
+            "ariefeko",
+            "tagihin",
+            "abc123",
+            "feature/test",
+            ["src/app.py"],
+            pr_number=42,
+        )
+
+    assert github.set_commit_status.call_args_list[1].args[:2] == ("abc123", "error")
+    assert "Failed to set error commit status" in caplog.text
+
+
 def test_github_review_falls_back_to_branch_lookup_with_head_owner():
     context_builder = MagicMock()
     context_builder.build.return_value = {
@@ -232,7 +260,9 @@ def test_github_review_falls_back_to_branch_lookup_with_head_owner():
     github.post_pr_comment.assert_called_once()
 
 
-def test_sentry_job_fetches_context_from_default_branch(bug_analysis_factory):
+def test_sentry_job_fetches_context_from_default_branch(
+    bug_analysis_factory: Callable[..., BugAnalysis],
+):
     context_builder = MagicMock()
     context_builder.build.return_value = {
         "changed_files": {"src/app.py": "changed content"},

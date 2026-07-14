@@ -34,8 +34,10 @@ class TestVerifySignature:
             assert SentryAgent().verify_signature(b"payload", "short") is False
 
         expected, provided = compare.call_args.args
-        assert len(expected) == 64
-        assert len(provided) == 64
+        assert len(expected) == 65
+        assert len(provided) == 65
+        assert expected[-1:] == b"\x01"
+        assert provided[-1:] == b"\x00"
 
     def test_rejects_overlong_signature_even_if_valid_digest_is_its_prefix(self, monkeypatch):
         monkeypatch.setenv("SENTRY_CLIENT_SECRET", "test-secret")
