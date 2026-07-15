@@ -87,7 +87,7 @@ Unit tests do not require live GitHub, Sentry, Redis, LLM, Tavily, or Qdrant ser
 ## Next priorities
 
 1. Enforce the repository allowlist in the Sentry webhook before Redis and queue operations.
-2. Sanitize Sentry error and repository-path logs.
+2. Validate pull-request numbers and changed-file response shapes in the GitHub webhook.
 3. Add minimal Langfuse tracing at the LLM boundary with telemetry redaction.
 4. Add trace/span coverage for retrieval, tools, and end-to-end review jobs.
 5. Run Qdrant target checks and an approved remote seed sync.
