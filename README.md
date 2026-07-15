@@ -105,6 +105,12 @@ RAG_MIN_CONFIDENCE=0.65
 
 RAG is read-only in the production request path and never blocks analysis. Indexing, synchronization, and update commands are documented in [Curated RAG](docs/rag.md).
 
+## Planned observability
+
+Langfuse is the selected platform for LLM traces, provider fallback visibility, token usage, cost tracking, and later evaluation. Instrumentation is not implemented yet. The planned integration is asynchronous and non-blocking, with telemetry redaction and separate development and production projects.
+
+See [Observability](docs/observability.md) for the architecture, Langfuse Cloud versus self-hosted decision, free-tier considerations, data policy, and rollout plan.
+
 ## Project layout
 
 ```text
@@ -129,6 +135,7 @@ Documentation/       Legacy exports and design assets
 - [Architecture](docs/architecture.md)
 - [Setup and Operations](docs/setup.md)
 - [Curated RAG](docs/rag.md)
+- [Observability](docs/observability.md)
 - [Security](docs/security.md)
 - [Implementation progress](PROGRESS.md)
 
