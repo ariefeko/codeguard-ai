@@ -121,7 +121,8 @@ LLM fallback chain.
 
 ## Run locally
 
-Start Redis, then run the API and worker in separate terminals:
+For direct development, start Redis and then run the API and worker in separate
+terminals:
 
 ```bash
 uvicorn src.api.main:app --reload --port 8000
@@ -159,6 +160,11 @@ The repository includes:
 
 - `Dockerfile` for the API container.
 - `Procfile` commands for `web` and `worker` processes.
-- `docker-compose.yml` for local Qdrant development.
+- `docker-compose.yml` for the local API, worker, persistent Redis, and optional
+  Qdrant profile.
 
-Railway requires separate web and worker services sharing the same Redis configuration. Configure secrets in the deployment platform, never in tracked files.
+For free portfolio hosting, follow [Local Deployment with Tailscale Funnel](local-tailscale.md).
+The API binds only to host loopback and Funnel supplies its public HTTPS
+hostname. Railway remains the later paid production target and requires separate
+web and worker services sharing the same Redis configuration. Configure Railway
+secrets in the deployment platform, never in tracked files.

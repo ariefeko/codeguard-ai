@@ -1,6 +1,6 @@
 # CodeGuard Implementation Progress
 
-> Status updated on July 15, 2026 on `main`.
+> Status updated on July 16, 2026 on `main`.
 
 ## Summary
 
@@ -16,6 +16,7 @@ The GitHub review and Sentry bug-analysis workflows are implemented and covered 
 | RAG runtime | Complete locally | Deterministic topics, read-only Qdrant retrieval, safe fallback |
 | RAG index lifecycle | Complete locally | Seed validation, dry-run, explicit sync, TTL/hash update planning |
 | LLM observability | Planned | Langfuse tracing first, with redaction, environment separation, and optional OpenTelemetry integration |
+| Local portfolio deployment | Active locally | Docker Compose runs API, worker, and persistent Redis; Tailscale Funnel supplies public HTTPS ingress |
 | Cloud/E2E validation | Pending | Railway variables, Qdrant collections, live PR and Sentry verification |
 
 ## Current flow
@@ -73,7 +74,7 @@ See [Curated RAG](docs/rag.md) for commands and configuration.
 
 ```text
 .venv/bin/pytest -q
-200 passed in 0.50s
+209 passed in 0.47s
 
 .venv/bin/python -m compileall -q src tests
 passed
